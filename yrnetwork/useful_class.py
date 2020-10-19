@@ -1,5 +1,6 @@
 from matplotlib.artist import Artist
 from igraph import BoundingBox, Graph, palettes
+import numpy as np
 
 class GraphArtist(Artist):
     """Matplotlib artist class that draws igraph graphs.
@@ -38,6 +39,15 @@ class GraphArtist(Artist):
             raise TypeError("graph plotting is supported only on Cairo backends")
         self.graph.__plot__(renderer.gc.ctx, self.bbox, self.palette, *self.args, **self.kwds)
 
+def z_score_normalization(x):
+    x=np.array(x)
+    x = (x - x.mean()) / (x.std())
+    return x
+
+def normalization(x):
+    x=np.array(x)
+    x = (x - x.min()) / (x.max()-x.min())
+    return x
 
 def test():
     import math
