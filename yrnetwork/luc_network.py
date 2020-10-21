@@ -1,6 +1,9 @@
-from setting import BaseConfig
-from useful_class import GraphArtist
-from useful_class import normalization
+# from .setting import *
+# from .useful_class import *
+# from .useful_class import *
+from setting import *
+from useful_class import *
+from useful_class import *
 import numpy as np
 import pandas as pd
 import igraph
@@ -45,7 +48,7 @@ COLOR_DIC = {
 }
 
 
-def build_luc_net(p_timeSta, p_timeEnd):
+def build_luc_net(p_timeSta, p_timeEnd,p_topic_var,p_threshold_per,p_color_var):
     # SeriesData
     series_df = pd.DataFrame()
     lucc_net = igraph.Graph(directed=True)
@@ -65,18 +68,22 @@ def build_luc_net(p_timeSta, p_timeEnd):
                                'Target_label', 'Year', 'Change_type', 'ChangeArea', 'ChangeLA']]
         series_df = series_df.append(this_year)
     # Filter this df (all edges)
-    per_tile_30 = np.percentile(series_df['ChangeArea'].values, 30)
-    series_df = series_df[(series_df["ChangeArea"] > per_tile_30)]
+    threshold = np.percentile(series_df[p_topic_var].values, p_threshold_per)
+    series_df = series_df[(series_df[p_topic_var] > threshold)]
     # Set the edges
     tuples = [tuple(x)
               for x in series_df[['Source_label', 'Target_label']].values]
     lucc_net.add_edges(tuples)
-    lucc_net.es['width'] = list(series_df['ChangeArea']*0.000000001)
+    lucc_net.es['width'] = list(abs(series_df[p_topic_var]*0.000000001))
     lucc_net.es['year'] = list(series_df['Year'])
-    cmap = plt.get_cmap('viridis')
-    norm = mpl.colors.Normalize(vmin=p_timeSta, vmax=p_timeEnd)
-    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-    lucc_net.es['color'] = list(series_df['Year'].map(sm.to_rgba))
+    if p_color_var=='Year':
+        cmap = plt.get_cmap('viridis')
+        norm = mpl.colors.Normalize(vmin=p_timeSta, vmax=p_timeEnd)
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        lucc_net.es['color'] = list(series_df['Year'].map(sm.to_rgba))
+    if p_color_var=='Sign':
+        SIGN_COLOR_DIC={-1:'#FF69B4',1:'#4169E1',0:'#00FFFFFF'}
+        lucc_net.es['color'] = list(series_df[p_topic_var].map(np.sign).map(SIGN_COLOR_DIC))
     lucc_net.es['curved'] = 0.1
     # lucc_net.es['curved'] = list(series_df['Year']*0.00025)
     lucc_net.es['arrow_size'] = 0.5
@@ -86,11 +93,11 @@ def build_luc_net(p_timeSta, p_timeEnd):
     lucc_bet = lucc_net.betweenness()
     lucc_net.vs['size'] = normalization(lucc_deg)*100
 
-    igraph.plot(lucc_net, BaseConfig.OUT_PATH + 'LUCC_Net//luccnet.pdf',
+    igraph.plot(lucc_net, BaseConfig.OUT_PATH + 'LUCC_Net//'+p_topic_var+'_luccnet.pdf',
                 bbox=(1000, 1000), margin=100, layout=lucc_net.layout('circle'))
     out_net_info = pd.DataFrame(
         {'point': lucc_cla, 'degree': lucc_deg, 'betweenness': lucc_bet})
-    out_net_info.to_csv(BaseConfig.OUT_PATH + 'LUCC_Net//PointInfo.csv')
+    out_net_info.to_csv(BaseConfig.OUT_PATH + 'LUCC_Net//'+p_topic_var+'_PointInfo.csv')
 
     # In Matplotlib
     # import matplotlib as mpl
@@ -105,10 +112,10 @@ def build_luc_net(p_timeSta, p_timeEnd):
     # fig.suptitle('sdf')
     # fig.savefig(BaseConfig.OUT_PATH + 'luccnet_mpl.pdf')
 
-    return lucc_net
+    return threshold
 
 
-def build_luc_net_no_mul(p_timeSta, p_timeEnd):
+def build_luc_net_no_mul(p_timeSta, p_timeEnd,p_topic_var,p_threshold,p_color_var):
     # SeriesData
     series_df = pd.DataFrame()
     lucc_net = igraph.Graph(directed=True)
@@ -132,8 +139,7 @@ def build_luc_net_no_mul(p_timeSta, p_timeEnd):
         this_year['Change_type'] = source_label + ' to ' + target_label
         this_year = this_year[['Source', 'Target', 'Source_label_noY', 'Target_label_noY',
                                'Source_label', 'Target_label', 'Year', 'Change_type', 'ChangeArea', 'ChangeLA']]
-        # per_tile_30 = np.percentile(this_year['ChangeArea'].values, 30)
-        this_year = this_year[(this_year["ChangeArea"] > 4446325.483272441)]
+        this_year = this_year[(this_year[p_topic_var] > p_threshold)]
         # Sub Net
         sub_lucc_net = igraph.Graph(directed=True)
         for o_class in list(LABEL_DIC.values()):
@@ -144,21 +150,20 @@ def build_luc_net_no_mul(p_timeSta, p_timeEnd):
         sub_mean_shortest.append(np.mean(sub_lucc_net.shortest_paths()))
 
         series_df = series_df.append(this_year)
-    # Filter this df (all edges)
-    per_tile_30 = np.percentile(series_df['ChangeArea'].values, 30)
-    series_df = series_df[(series_df["ChangeArea"] > per_tile_30)]
-    print(per_tile_30)
     # Set the edges
     tuples = [tuple(x)
               for x in series_df[['Source_label', 'Target_label']].values]
     lucc_net.add_edges(tuples)
-    lucc_net.es['width'] = list(series_df['ChangeArea']*0.000000001)
+    lucc_net.es['width'] = list(abs(series_df[p_topic_var]*0.000000001))
     lucc_net.es['year'] = list(series_df['Year'])
-    cmap = mpl.cm.viridis
-    # cmap = plt.get_cmap('spring')
-    norm = mpl.colors.Normalize(vmin=p_timeSta, vmax=p_timeEnd)
-    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-    lucc_net.es['color'] = list(series_df['Year'].map(sm.to_rgba))
+    if p_color_var=='Year':
+        cmap = plt.get_cmap('viridis')
+        norm = mpl.colors.Normalize(vmin=p_timeSta, vmax=p_timeEnd)
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        lucc_net.es['color'] = list(series_df['Year'].map(sm.to_rgba))
+    if p_color_var=='Sign':
+        SIGN_COLOR_DIC={-1:'#FF69B4',1:'#4169E1',0:'#00FFFFFF'}
+        lucc_net.es['color'] = list(series_df[p_topic_var].map(np.sign).map(SIGN_COLOR_DIC))
     lucc_net.es['curved'] = 0.1
     lucc_net.es['arrow_size'] = 0.5
 
@@ -170,7 +175,7 @@ def build_luc_net_no_mul(p_timeSta, p_timeEnd):
     lucc_yea = lucc_net.vs['year']
     # lucc_net.vs['size']=normalization(lucc_deg)*100
 
-    igraph.plot(lucc_net, BaseConfig.OUT_PATH + 'LUCC_Net//luccnet_no_mul.pdf', bbox=(2500, 1000),
+    igraph.plot(lucc_net, BaseConfig.OUT_PATH + 'LUCC_Net//'+p_topic_var+'_luccnet_no_mul.pdf', bbox=(2500, 1000),
                 margin=100, layout=lucc_net.layout_grid(width=(p_timeEnd-p_timeSta+2), dim=2))
     out_net_info = pd.DataFrame({'class': lucc_cla,
                                  'year': lucc_yea,
@@ -180,25 +185,29 @@ def build_luc_net_no_mul(p_timeSta, p_timeEnd):
                                  'betweenness': lucc_bet})
     out_net_info['out_in'] = out_net_info['outdegree']/out_net_info['indegree']
     out_net_info.to_csv(BaseConfig.OUT_PATH +
-                        'LUCC_Net//LargeNetInfo_no_mul.csv')
+                        'LUCC_Net//'+p_topic_var+'_LargeNetInfo_no_mul.csv')
 
     out_net_info_temp = out_net_info.replace(np.inf, np.nan).replace(0, np.nan)
     class_mean_degree = out_net_info_temp.groupby('class')['degree'].mean()
     class_mean_out_in = out_net_info_temp.groupby('class')['out_in'].mean()
     out_class_info = pd.DataFrame({'class_mean_degree': class_mean_degree,
                                    'class_mean_out_in': class_mean_out_in})
-    out_class_info.to_csv(BaseConfig.OUT_PATH + 'LUCC_Net//ClassInfo.csv')
+    out_class_info.to_csv(BaseConfig.OUT_PATH + 'LUCC_Net//'+p_topic_var+'_ClassInfo.csv')
 
     out_sub_net_info = pd.DataFrame({'target_year': np.arange(p_timeSta, p_timeEnd+1),
                                      'average_shortest_path_length': sub_mean_shortest})
-    out_sub_net_info.to_csv(BaseConfig.OUT_PATH + 'LUCC_Net//SubNetInfo.csv')
+    out_sub_net_info.to_csv(BaseConfig.OUT_PATH + 'LUCC_Net//'+p_topic_var+'_SubNetInfo.csv')
 
-    return lucc_net
 
 
 if __name__ == "__main__":
-    build_luc_net_no_mul(1987, 2018)
-    build_luc_net(1987, 2018)
+    # Topic Var
+    # 'ChangeArea', 'ChangeLA'
+    threshold_area = build_luc_net(1987, 2018,'ChangeArea',30,'Year')
+    build_luc_net_no_mul(1987, 2018,'ChangeArea',threshold_area,'Year')
+    
+    threshold_la = build_luc_net(1987, 2018,'ChangeLA',30,'Sign')
+    build_luc_net_no_mul(1987, 2018,'ChangeLA',threshold_la,'Sign')
 
 # lucc_net = network.Network(edge_list=series_df[['Source','Target']].values, directed=True)
 # lucc_net.set_link_attribute('Change_Area',series_df['ChangeArea'].values)
