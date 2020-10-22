@@ -1,6 +1,7 @@
 # from .setting import *
 # from .useful_class import *
 # from .useful_class import *
+from matplotlib.pyplot import xlim
 from setting import *
 from useful_class import *
 from useful_class import *
@@ -12,6 +13,7 @@ import matplotlib as mpl
 mpl.use('cairo')
 import matplotlib.pyplot as plt
 
+# The code and label dictionary
 LABEL_DIC = {
     101: 'DBF',
     102: 'ENF',
@@ -29,6 +31,7 @@ LABEL_DIC = {
     701: 'DB',
     702: 'LV',
 }
+# The label and color dictionary
 COLOR_DIC = {
     'DBF': '#1B7201',
     'ENF': '#064A01',
@@ -48,14 +51,47 @@ COLOR_DIC = {
 }
 
 
-def build_luc_net(p_timeSta, p_timeEnd,p_topic_var,p_threshold_per,p_color_var):
-    # SeriesData
+def find_threshold(p_timeSta, p_timeEnd, p_threshold_per):
+    '''
+    Get the suitable threshold according to ChangeArea
+    return a threshold according to the input percent number
+    '''
+    # get all links in a DataFrame
     series_df = pd.DataFrame()
+    for year in np.arange(p_timeSta, p_timeEnd+1):
+        this_year = pd.read_csv(BaseConfig.LUC_NET_DATA_PATH +
+                                BaseConfig.LUC_NET_DATA_HEAD + str(year) + BaseConfig.LUC_NET_DATA_TAIL)
+        series_df = series_df.append(this_year)
+    threshold_min = np.percentile(
+        series_df['ChangeArea'].values, p_threshold_per)
+    threshold_max = np.percentile(series_df['ChangeArea'].values, 100)
+    series_df = series_df[(series_df['ChangeArea'] > threshold_min) & (
+        series_df['ChangeArea'] < threshold_max)]
+    # see the histogram
+    fig, axs = plt.subplots(figsize=(7, 5), dpi=400)
+    plt.hexbin(series_df['ChangeArea'],
+               series_df['ChangeLA'], bins=625, cmap='Blues')
+    plt.xlabel('ChangeArea')
+    plt.ylabel('ChangeLA')
+    cb = plt.colorbar()
+    cb.set_label('counts in bin')
+    plt.savefig(BaseConfig.OUT_PATH + 'LUCC_Net//HistofAllLinks.png')
+    return threshold_min
+
+
+def build_luc_net(p_timeSta, p_timeEnd, p_topic_var, p_threshold_area, p_color_var):
+    '''
+    Build net for change area in a huge multiple net and output information every class
+    return this network
+    '''
+    # build a net network
     lucc_net = igraph.Graph(directed=True)
+    # add every vertex to the net
     for o_class in list(LABEL_DIC.values()):
         lucc_net.add_vertex(
             o_class, color=COLOR_DIC[o_class], size=65, label=o_class, label_size=30)
-
+    # get all links in a DataFrame
+    series_df = pd.DataFrame()
     for year in np.arange(p_timeSta, p_timeEnd+1):
         this_year = pd.read_csv(BaseConfig.LUC_NET_DATA_PATH +
                                 BaseConfig.LUC_NET_DATA_HEAD + str(year) + BaseConfig.LUC_NET_DATA_TAIL)
@@ -67,39 +103,62 @@ def build_luc_net(p_timeSta, p_timeEnd,p_topic_var,p_threshold_per,p_color_var):
         this_year = this_year[['Source', 'Target', 'Source_label',
                                'Target_label', 'Year', 'Change_type', 'ChangeArea', 'ChangeLA']]
         series_df = series_df.append(this_year)
-    # Filter this df (all edges)
-    threshold = np.percentile(series_df[p_topic_var].values, p_threshold_per)
-    series_df = series_df[(series_df[p_topic_var] > threshold)]
-    # Set the edges
+    # filter this DataFrame (all edges)
+    series_df = series_df[(series_df['ChangeArea'] > p_threshold_area)]
+    # set the edges for the net
     tuples = [tuple(x)
               for x in series_df[['Source_label', 'Target_label']].values]
     lucc_net.add_edges(tuples)
-    lucc_net.es['width'] = list(abs(series_df[p_topic_var]*0.000000001))
+    # set the width with a scale and set the max width
+    # there we use the absolute value to drwa the edge
+    widths = abs(series_df[p_topic_var]*0.000000001)
+    max_width = np.percentile(widths, 95)
+    lucc_net.es['width'] = list(widths.replace(
+        widths[widths > max_width], max_width))
+    # set the year property
     lucc_net.es['year'] = list(series_df['Year'])
-    if p_color_var=='Year':
+    # if the colr var is Year
+    if p_color_var == 'Year':
         cmap = plt.get_cmap('viridis')
         norm = mpl.colors.Normalize(vmin=p_timeSta, vmax=p_timeEnd)
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
         lucc_net.es['color'] = list(series_df['Year'].map(sm.to_rgba))
-    if p_color_var=='Sign':
-        SIGN_COLOR_DIC={-1:'#FF69B4',1:'#4169E1',0:'#00FFFFFF'}
-        lucc_net.es['color'] = list(series_df[p_topic_var].map(np.sign).map(SIGN_COLOR_DIC))
+    # when the width var has negative value, we should show the +- replace the Year
+    if p_color_var == 'Sign':
+        SIGN_COLOR_DIC = {-1: '#FF69B4', 1: '#4169E1', 0: '#00FFFFFF'}
+        lucc_net.es['color'] = list(
+            series_df[p_topic_var].map(np.sign).map(SIGN_COLOR_DIC))
+    # set the curved of edge
     lucc_net.es['curved'] = 0.1
+    # also can use this code to get different curved edge
     # lucc_net.es['curved'] = list(series_df['Year']*0.00025)
+    # set the arrow size
     lucc_net.es['arrow_size'] = 0.5
 
-    lucc_cla = lucc_net.vs['label']
-    lucc_deg = lucc_net.degree()
-    lucc_bet = lucc_net.betweenness()
-    lucc_net.vs['size'] = normalization(lucc_deg)*100
+    # get the property of this network
+    lucc_class = lucc_net.vs['label']
+    lucc_degree = lucc_net.degree()
+    lucc_betness = lucc_net.betweenness()
+    lucc_cloness = lucc_net.closeness()
+    lucc_diversity = lucc_net.diversity(weights='width')
 
-    igraph.plot(lucc_net, BaseConfig.OUT_PATH + 'LUCC_Net//'+p_topic_var+'_luccnet.pdf',
+    # draw this network
+    # set the vertex size according its degree
+    lucc_net.vs['size'] = normalization(lucc_degree)*100
+    igraph.plot(lucc_net, BaseConfig.OUT_PATH + 'LUCC_Net//'+p_topic_var+'_multiple_network.pdf',
                 bbox=(1000, 1000), margin=100, layout=lucc_net.layout('circle'))
-    out_net_info = pd.DataFrame(
-        {'point': lucc_cla, 'degree': lucc_deg, 'betweenness': lucc_bet})
-    out_net_info.to_csv(BaseConfig.OUT_PATH + 'LUCC_Net//'+p_topic_var+'_PointInfo.csv')
 
-    # In Matplotlib
+    # output information in a csv file
+    out_net_info = pd.DataFrame({'point': lucc_class,
+                                 'degree': lucc_degree,
+                                 'betweenness': lucc_betness,
+                                 'closeness': lucc_cloness,
+                                 'diversity': lucc_diversity
+                                 })
+    out_net_info.to_csv(BaseConfig.OUT_PATH + 'LUCC_Net//' +
+                        p_topic_var+'_multiple_network_vertex_info.csv')
+
+    # ***** This part is about how to use igraph in Matplotlib *****
     # import matplotlib as mpl
     # mpl.use('cairo')
     # import matplotlib.pyplot as plt
@@ -111,22 +170,29 @@ def build_luc_net(p_timeSta, p_timeEnd,p_topic_var,p_threshold_per,p_color_var):
     # plt.axis("off")
     # fig.suptitle('sdf')
     # fig.savefig(BaseConfig.OUT_PATH + 'luccnet_mpl.pdf')
+    return lucc_net
 
-    return threshold
 
-
-def build_luc_net_no_mul(p_timeSta, p_timeEnd,p_topic_var,p_threshold,p_color_var):
-    # SeriesData
-    series_df = pd.DataFrame()
+def build_luc_net_no_mul(p_timeSta, p_timeEnd, p_topic_var, p_threshold_area, p_color_var):
+    '''
+    Build net for change area in a continuous and im-multiple net and output information of every year net
+    return this network
+    '''
+    # build a net network
     lucc_net = igraph.Graph(directed=True)
-    sub_mean_shortest = []
-
+    # add every vertex to the net
     for o_class in list(LABEL_DIC.values()):
         lucc_net.add_vertex(o_class+str(1986), label=o_class,
                             color=COLOR_DIC[o_class], year=1986, size=40)
         for o_year in np.arange(p_timeSta, p_timeEnd+1):
             lucc_net.add_vertex(o_class+str(o_year), label=o_class,
                                 color=COLOR_DIC[o_class], year=o_year, size=40)
+    # new some var to put information
+    sub_net_mean_shortest = []
+    sub_net_density = []
+    sub_net_transitivity_global = []
+    # get all links in a DataFrame
+    series_df = pd.DataFrame()
     for year in np.arange(p_timeSta, p_timeEnd+1):
         this_year = pd.read_csv(BaseConfig.LUC_NET_DATA_PATH +
                                 BaseConfig.LUC_NET_DATA_HEAD + str(year) + BaseConfig.LUC_NET_DATA_TAIL)
@@ -139,76 +205,127 @@ def build_luc_net_no_mul(p_timeSta, p_timeEnd,p_topic_var,p_threshold,p_color_va
         this_year['Change_type'] = source_label + ' to ' + target_label
         this_year = this_year[['Source', 'Target', 'Source_label_noY', 'Target_label_noY',
                                'Source_label', 'Target_label', 'Year', 'Change_type', 'ChangeArea', 'ChangeLA']]
-        this_year = this_year[(this_year[p_topic_var] > p_threshold)]
-        # Sub Net
+        # filter this year's edges
+        this_year = this_year[(this_year['ChangeArea'] > p_threshold_area)]
+        # build sub net in every continuous two year
         sub_lucc_net = igraph.Graph(directed=True)
         for o_class in list(LABEL_DIC.values()):
             sub_lucc_net.add_vertex(o_class)
         sub_tuples = [tuple(x) for x in this_year[[
             'Source_label_noY', 'Target_label_noY']].values]
         sub_lucc_net.add_edges(sub_tuples)
-        sub_mean_shortest.append(np.mean(sub_lucc_net.shortest_paths()))
-
+        mean_shortest = np.mean(sub_lucc_net.shortest_paths())
+        sub_net_mean_shortest.append(mean_shortest)
+        density = sub_lucc_net.density()
+        sub_net_density.append(density)
+        transitivity_global = sub_lucc_net.transitivity_undirected()
+        sub_net_transitivity_global.append(transitivity_global)
+        # add to the DataFrame for the huge net
         series_df = series_df.append(this_year)
-    # Set the edges
+    # output these sub net information in csv file
+    out_sub_net_info = pd.DataFrame({'target_year': np.arange(p_timeSta, p_timeEnd+1),
+                                     'mean_shortest_path': sub_net_mean_shortest,
+                                     'density': sub_net_density,
+                                     'transitivity_undirected': sub_net_transitivity_global})
+    out_sub_net_info.to_csv(BaseConfig.OUT_PATH +
+                            'LUCC_Net//'+p_topic_var+'_sub_net_every2year_info.csv')
+    # set the edges
     tuples = [tuple(x)
               for x in series_df[['Source_label', 'Target_label']].values]
     lucc_net.add_edges(tuples)
-    lucc_net.es['width'] = list(abs(series_df[p_topic_var]*0.000000001))
+    # set the width with a scale and set the max width
+    # there we use the absolute value to drwa the edge
+    widths = abs(series_df[p_topic_var]*0.000000001)
+    max_width = np.percentile(widths, 95)
+    lucc_net.es['width'] = list(widths.replace(
+        widths[widths > max_width], max_width))
+    # set the year property
     lucc_net.es['year'] = list(series_df['Year'])
-    if p_color_var=='Year':
+    # if the colr var is Year
+    if p_color_var == 'Year':
         cmap = plt.get_cmap('viridis')
         norm = mpl.colors.Normalize(vmin=p_timeSta, vmax=p_timeEnd)
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
         lucc_net.es['color'] = list(series_df['Year'].map(sm.to_rgba))
-    if p_color_var=='Sign':
-        SIGN_COLOR_DIC={-1:'#FF69B4',1:'#4169E1',0:'#00FFFFFF'}
-        lucc_net.es['color'] = list(series_df[p_topic_var].map(np.sign).map(SIGN_COLOR_DIC))
+    # when the width var has negative value, we should show the +- replace the Year
+    if p_color_var == 'Sign':
+        SIGN_COLOR_DIC = {-1: '#FF69B480', 1: '#4169E180', 0: '#00FFFFFF'}
+        lucc_net.es['color'] = list(
+            series_df[p_topic_var].map(np.sign).map(SIGN_COLOR_DIC))
+    # set the curved of edge
     lucc_net.es['curved'] = 0.1
+    # also can use this code to get different curved edge
+    # lucc_net.es['curved'] = list(series_df['Year']*0.00025)
+    # set the arrow size
     lucc_net.es['arrow_size'] = 0.5
 
-    lucc_cla = lucc_net.vs['label']
-    lucc_deg = lucc_net.degree()
+    # show the network
+    igraph.plot(lucc_net, BaseConfig.OUT_PATH + 'LUCC_Net//'+p_topic_var+'_im_multiple_network.pdf', bbox=(2500, 1000),
+                margin=100, layout=lucc_net.layout_grid(width=(p_timeEnd-p_timeSta+2), dim=2))
+
+    # get the property of this network's vertex
+    lucc_class = lucc_net.vs['label']
+    lucc_degree = lucc_net.degree()
     lucc_ind = lucc_net.indegree()
     lucc_oud = lucc_net.outdegree()
-    lucc_bet = lucc_net.betweenness()
+    lucc_betness = lucc_net.betweenness()
     lucc_yea = lucc_net.vs['year']
-    # lucc_net.vs['size']=normalization(lucc_deg)*100
-
-    igraph.plot(lucc_net, BaseConfig.OUT_PATH + 'LUCC_Net//'+p_topic_var+'_luccnet_no_mul.pdf', bbox=(2500, 1000),
-                margin=100, layout=lucc_net.layout_grid(width=(p_timeEnd-p_timeSta+2), dim=2))
-    out_net_info = pd.DataFrame({'class': lucc_cla,
+    # output vertex information in a csv file
+    out_net_info = pd.DataFrame({'class': lucc_class,
                                  'year': lucc_yea,
-                                 'degree': lucc_deg,
+                                 'degree': lucc_degree,
                                  'indegree': lucc_ind,
                                  'outdegree': lucc_oud,
-                                 'betweenness': lucc_bet})
+                                 'betweenness': lucc_betness})
     out_net_info['out_in'] = out_net_info['outdegree']/out_net_info['indegree']
     out_net_info.to_csv(BaseConfig.OUT_PATH +
-                        'LUCC_Net//'+p_topic_var+'_LargeNetInfo_no_mul.csv')
+                        'LUCC_Net//'+p_topic_var+'_im_multiple_network_vertex_info.csv')
 
+    # get some property's mean value
     out_net_info_temp = out_net_info.replace(np.inf, np.nan).replace(0, np.nan)
     class_mean_degree = out_net_info_temp.groupby('class')['degree'].mean()
     class_mean_out_in = out_net_info_temp.groupby('class')['out_in'].mean()
     out_class_info = pd.DataFrame({'class_mean_degree': class_mean_degree,
                                    'class_mean_out_in': class_mean_out_in})
-    out_class_info.to_csv(BaseConfig.OUT_PATH + 'LUCC_Net//'+p_topic_var+'_ClassInfo.csv')
+    out_class_info.to_csv(BaseConfig.OUT_PATH +
+                          'LUCC_Net//'+p_topic_var+'_im_multiple_network_class_info.csv')
+    return lucc_net
 
-    out_sub_net_info = pd.DataFrame({'target_year': np.arange(p_timeSta, p_timeEnd+1),
-                                     'average_shortest_path_length': sub_mean_shortest})
-    out_sub_net_info.to_csv(BaseConfig.OUT_PATH + 'LUCC_Net//'+p_topic_var+'_SubNetInfo.csv')
 
+def cluster_net(net, p_topic_var):
+    """
+    cluster a net using some community clustering methods according to edge betweenness
+    """
+    # This is a method of community clustering method
+    clustered_net = net.community_edge_betweenness(
+        clusters=2, directed=True, weights='width')
+    igraph.plot(clustered_net, BaseConfig.OUT_PATH + 'LUCC_Net//' +
+                p_topic_var+'clustered_Net.pdf', bbox=(1000, 1000), margin=100)
 
 
 if __name__ == "__main__":
-    # Topic Var
-    # 'ChangeArea', 'ChangeLA'
-    threshold_area = build_luc_net(1987, 2018,'ChangeArea',30,'Year')
-    build_luc_net_no_mul(1987, 2018,'ChangeArea',threshold_area,'Year')
-    
-    threshold_la = build_luc_net(1987, 2018,'ChangeLA',30,'Sign')
-    build_luc_net_no_mul(1987, 2018,'ChangeLA',threshold_la,'Sign')
+    # There are two types topic var in the lucc_net
+    # 'ChangeArea' and 'ChangeLA'
 
+    # (1) Get the suitable threshold according to ChangeArea
+    threshold_area = find_threshold(1987, 2018, 20)
+    # (2) Build net for change area in a huge multiple net and output information every class
+    chang_area_net = build_luc_net(
+        1987, 2018, 'ChangeArea', threshold_area, 'Year')
+    # (3) Cluster net and output result
+    cluster_net(chang_area_net, 'ChangeArea')
+    # (4) Build net for change area in a continuous and im-multiple net and output information of every year net
+    chang_area_net_no_mul = build_luc_net_no_mul(
+        1987, 2018, 'ChangeArea', threshold_area, 'Year')
+
+    # The same as above
+    chang_la_net = build_luc_net(
+        1987, 2018, 'ChangeLA', threshold_area, 'Sign')
+    cluster_net(chang_la_net, 'ChangeLA')
+    chang_la_net_no_mul = build_luc_net_no_mul(
+        1987, 2018, 'ChangeLA', threshold_area, 'Sign')
+
+# ***** This part is for pyunicorn *****
 # lucc_net = network.Network(edge_list=series_df[['Source','Target']].values, directed=True)
 # lucc_net.set_link_attribute('Change_Area',series_df['ChangeArea'].values)
 # out_deg=lucc_net.betweenness()
