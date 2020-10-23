@@ -12,6 +12,8 @@ import pyunicorn.core.network as network
 import matplotlib as mpl
 mpl.use('cairo')
 import matplotlib.pyplot as plt
+mpl.rcParams['font.family'] = 'sans-serif'
+mpl.rcParams['font.sans-serif'] = 'NSimSun'
 
 # The code and label dictionary
 LABEL_DIC = {
@@ -50,7 +52,6 @@ COLOR_DIC = {
     'LV': '#CCCCCC'
 }
 
-
 def find_threshold(p_timeSta, p_timeEnd, p_threshold_per):
     '''
     Get the suitable threshold according to ChangeArea
@@ -87,9 +88,9 @@ def build_luc_net(p_timeSta, p_timeEnd, p_topic_var, p_threshold_area, p_color_v
     # build a net network
     lucc_net = igraph.Graph(directed=True)
     # add every vertex to the net
-    for o_class in list(LABEL_DIC.values()):
+    for v_class in list(LABEL_DIC.values()):
         lucc_net.add_vertex(
-            o_class, color=COLOR_DIC[o_class], size=65, label=o_class, label_size=30)
+            v_class, color=COLOR_DIC[v_class], size=65, label=v_class, label_size=30,frame_width=0)
     # get all links in a DataFrame
     series_df = pd.DataFrame()
     for year in np.arange(p_timeSta, p_timeEnd+1):
@@ -129,9 +130,9 @@ def build_luc_net(p_timeSta, p_timeEnd, p_topic_var, p_threshold_area, p_color_v
         lucc_net.es['color'] = list(
             series_df[p_topic_var].map(np.sign).map(SIGN_COLOR_DIC))
     # set the curved of edge
-    lucc_net.es['curved'] = 0.1
+    # lucc_net.es['curved'] = 0.15
     # also can use this code to get different curved edge
-    # lucc_net.es['curved'] = list(series_df['Year']*0.00025)
+    # lucc_net.es['curved'] = list(series_df['Year']*0.0002)
     # set the arrow size
     lucc_net.es['arrow_size'] = 0.5
 
@@ -146,7 +147,7 @@ def build_luc_net(p_timeSta, p_timeEnd, p_topic_var, p_threshold_area, p_color_v
     # set the vertex size according its degree
     lucc_net.vs['size'] = normalization(lucc_degree)*100
     igraph.plot(lucc_net, BaseConfig.OUT_PATH + 'LUCC_Net//'+p_topic_var+'_multiple_network.pdf',
-                bbox=(1000, 1000), margin=100, layout=lucc_net.layout('circle'))
+                bbox=(1000, 1000), margin=100)
 
     # output information in a csv file
     out_net_info = pd.DataFrame({'point': lucc_class,
@@ -181,12 +182,12 @@ def build_luc_net_no_mul(p_timeSta, p_timeEnd, p_topic_var, p_threshold_area, p_
     # build a net network
     lucc_net = igraph.Graph(directed=True)
     # add every vertex to the net
-    for o_class in list(LABEL_DIC.values()):
-        lucc_net.add_vertex(o_class+str(1986), label=o_class,
-                            color=COLOR_DIC[o_class], year=1986, size=40)
+    for v_class in list(LABEL_DIC.values()):
+        lucc_net.add_vertex(v_class+str(1986), label=v_class,
+                            color=COLOR_DIC[v_class], year=1986, size=40)
         for o_year in np.arange(p_timeSta, p_timeEnd+1):
-            lucc_net.add_vertex(o_class+str(o_year), label=o_class,
-                                color=COLOR_DIC[o_class], year=o_year, size=40)
+            lucc_net.add_vertex(v_class+str(o_year), label=v_class,
+                                color=COLOR_DIC[v_class], year=o_year, size=40)
     # new some var to put information
     sub_net_mean_shortest = []
     sub_net_density = []
@@ -209,8 +210,8 @@ def build_luc_net_no_mul(p_timeSta, p_timeEnd, p_topic_var, p_threshold_area, p_
         this_year = this_year[(this_year['ChangeArea'] > p_threshold_area)]
         # build sub net in every continuous two year
         sub_lucc_net = igraph.Graph(directed=True)
-        for o_class in list(LABEL_DIC.values()):
-            sub_lucc_net.add_vertex(o_class)
+        for v_class in list(LABEL_DIC.values()):
+            sub_lucc_net.add_vertex(v_class)
         sub_tuples = [tuple(x) for x in this_year[[
             'Source_label_noY', 'Target_label_noY']].values]
         sub_lucc_net.add_edges(sub_tuples)
@@ -289,6 +290,27 @@ def build_luc_net_no_mul(p_timeSta, p_timeEnd, p_topic_var, p_threshold_area, p_
                                    'class_mean_out_in': class_mean_out_in})
     out_class_info.to_csv(BaseConfig.OUT_PATH +
                           'LUCC_Net//'+p_topic_var+'_im_multiple_network_class_info.csv')
+    # plot this df as a fig
+    fig = plt.figure(figsize=(10, 6), dpi=400)
+    ax = fig.add_subplot(111)
+    ax.plot(np.arange(p_timeSta-1, p_timeEnd)+0.5,out_sub_net_info['mean_shortest_path'],label='平均最短路径长度',color='k', linewidth=1.5, marker='o', ms=5, linestyle='-')
+    ax.plot(np.arange(p_timeSta-1, p_timeEnd)+0.5,out_sub_net_info['density'],label='网络密度',color='k', linewidth=1.5, marker='^', ms=5, linestyle='-')
+    ax.plot(np.arange(p_timeSta-1, p_timeEnd)+0.5,out_sub_net_info['transitivity_undirected'],label='网络传递性', color='k',linewidth=1.5, marker='s', ms=5, linestyle='-')
+
+    ax.legend(loc='upper left', ncol=3, prop={'size': 14, }, frameon=False)
+    ax.set_xlim(1985.5, 2018.5)
+    # ax.set_ylim(-0.8, 1)
+    ax.set_xticks(np.arange(p_timeSta-1, p_timeEnd+1))
+    label_X = ['1986', '', '', '', '1990', '', '', '', '', '1995',
+               '', '', '', '', '2000', '', '', '', '', '2005',
+               '', '', '', '', '2010', '', '', '', '', '2015', '', '', '2018']
+    ax.set_xticklabels(label_X, fontsize=14, fontfamily='Times New Roman')
+    plt.yticks(fontproperties='Times New Roman', size=14)
+    plt.xticks(fontproperties='Times New Roman', size=14)
+    ax.set_xlabel('年份', fontsize=14)
+    ax.set_ylabel('值', fontsize=14)
+    plt.savefig(BaseConfig.OUT_PATH + 'LUCC_Net//'+p_topic_var+'_fig_every_sub_net_every_year.png',
+                bbox_inches='tight')
     return lucc_net
 
 
@@ -300,7 +322,9 @@ def cluster_net(net, p_topic_var):
     clustered_net = net.community_edge_betweenness(
         clusters=2, directed=True, weights='width')
     igraph.plot(clustered_net, BaseConfig.OUT_PATH + 'LUCC_Net//' +
-                p_topic_var+'clustered_Net.pdf', bbox=(1000, 1000), margin=100)
+                p_topic_var+'clustered_Net_Group.pdf', bbox=(1000, 1000), margin=100)
+    igraph.plot(clustered_net.as_clustering(), BaseConfig.OUT_PATH + 'LUCC_Net//' +
+            p_topic_var+'clustered_Net.pdf', bbox=(1000, 1000), margin=100)
 
 
 if __name__ == "__main__":
