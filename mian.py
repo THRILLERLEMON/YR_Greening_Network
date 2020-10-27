@@ -5,7 +5,7 @@ import yrnetwork.luc_network
 
 def main(analyzed_net):
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
-    if analyzed_net=='luc_net':
+    if analyzed_net == 'luc_net':
         pass
     else:
         pass

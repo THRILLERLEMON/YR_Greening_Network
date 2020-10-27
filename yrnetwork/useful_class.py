@@ -2,11 +2,11 @@ from matplotlib.artist import Artist
 from igraph import BoundingBox, Graph, palettes
 import numpy as np
 
+
 class GraphArtist(Artist):
     """Matplotlib artist class that draws igraph graphs.
     Only Cairo-based backends are supported.
     """
-
     def __init__(self, graph, bbox, palette=None, *args, **kwds):
         """Constructs a graph artist that draws the given graph within
         the given bounding box.
@@ -36,18 +36,23 @@ class GraphArtist(Artist):
     def draw(self, renderer):
         from matplotlib.backends.backend_cairo import RendererCairo
         if not isinstance(renderer, RendererCairo):
-            raise TypeError("graph plotting is supported only on Cairo backends")
-        self.graph.__plot__(renderer.gc.ctx, self.bbox, self.palette, *self.args, **self.kwds)
+            raise TypeError(
+                "graph plotting is supported only on Cairo backends")
+        self.graph.__plot__(renderer.gc.ctx, self.bbox, self.palette,
+                            *self.args, **self.kwds)
+
 
 def z_score_normalization(x):
-    x=np.array(x)
+    x = np.array(x)
     x = (x - x.mean()) / (x.std())
     return x
 
+
 def normalization(x):
-    x=np.array(x)
-    x = (x - x.min()) / (x.max()-x.min())
+    x = np.array(x)
+    x = (x - x.min()) / (x.max() - x.min())
     return x
+
 
 def test():
     import math
@@ -63,7 +68,7 @@ def test():
     # Create a basic plot
     axes = fig.add_subplot(111)
     xs = range(200)
-    ys = [math.sin(x/10.) for x in xs]
+    ys = [math.sin(x / 10.) for x in xs]
     axes.plot(xs, ys)
 
     # Draw the graph over the plot
@@ -81,7 +86,8 @@ def test():
     # Save the figure
     fig.savefig("test.pdf")
 
-    print ("Plot saved to test.pdf")
+    print("Plot saved to test.pdf")
+
 
 if __name__ == "__main__":
     test()
