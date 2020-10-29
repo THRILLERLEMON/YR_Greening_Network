@@ -51,6 +51,23 @@ COLOR_DIC = {
     '沙漠和裸土': '#6A6A6A',
     '低植被覆盖地表': '#CCCCCC'
 }
+LABEL_DIC_EN = {
+    '落叶阔叶林': 'DBF',
+    '常绿针叶林': 'ENF',
+    '落叶常绿混交林': 'MF',
+    '灌丛': 'Shrub',
+    '低覆盖草地': 'LCG',
+    '中覆盖草地': 'MCG',
+    '高覆盖草地': 'HCG',
+    '谷物耕地': 'Crop',
+    '果园和梯田': 'OT',
+    '城市及建设用地': 'UB',
+    '地表水': 'Water',
+    '湿地': 'Wet',
+    '积雪和冰': 'Snow',
+    '沙漠和裸土': 'DB',
+    '低植被覆盖地表': 'LV',
+}
 # LABEL_DIC = {
 #     101: 'DBF',
 #     102: 'ENF',
@@ -86,6 +103,25 @@ COLOR_DIC = {
 #     'DB': '#6A6A6A',
 #     'LV': '#CCCCCC'
 # }
+
+# this info is from the clustered result
+CLUSTERED_COLOR = {
+    '落叶阔叶林': '#028760',
+    '常绿针叶林': '#165e83',
+    '落叶常绿混交林': '#028760',
+    '灌丛': '#028760',
+    '低覆盖草地': '#f39800',
+    '中覆盖草地': '#f39800',
+    '高覆盖草地': '#7ebea5',
+    '谷物耕地': '#e95464',
+    '果园和梯田': '#e95464',
+    '城市及建设用地': '#e95464',
+    '地表水': '#2ca9e1',
+    '湿地': '#2ca9e1',
+    '积雪和冰': '#2ca9e1',
+    '沙漠和裸土': '#2ca9e1',
+    '低植被覆盖地表': '#c8c2be'
+}
 
 
 def find_threshold(p_timeSta, p_timeEnd, p_threshold_per):
@@ -130,7 +166,8 @@ def build_luc_net(p_timeSta, p_timeEnd, p_topic_var, p_threshold_area,
     # add every vertex to the net
     for v_class in list(LABEL_DIC.values()):
         lucc_net.add_vertex(v_class,
-                            color=COLOR_DIC[v_class],
+                            name_en=LABEL_DIC_EN[v_class],
+                            color=CLUSTERED_COLOR[v_class],
                             size=65,
                             label=v_class,
                             label_size=30,
@@ -168,10 +205,34 @@ def build_luc_net(p_timeSta, p_timeEnd, p_topic_var, p_threshold_area,
     lucc_net.es['year'] = list(series_df['Year'])
     # if the colr var is Year
     if p_color_var == 'Year':
+        # get the color bar from matplotlib
         cmap = plt.get_cmap('viridis')
         norm = mpl.colors.Normalize(vmin=p_timeSta, vmax=p_timeEnd)
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
         lucc_net.es['color'] = list(series_df['Year'].map(sm.to_rgba))
+        # output this colorbar legend
+        fig_cb = plt.figure(figsize=(10, 6), dpi=400)
+        ax_cb = fig_cb.add_subplot(111)
+        axcolorbar = ax_cb.scatter(series_df['Year'],
+                                   series_df['Year'],
+                                   c=series_df['Year'],
+                                   norm=norm,
+                                   cmap=cmap)
+        color_bar = fig_cb.colorbar(axcolorbar,
+                                    ax=ax_cb,
+                                    orientation='vertical')
+        color_bar.set_ticks([1987, 1990, 1995, 2000, 2005, 2010, 2015, 2018])
+        color_bar.set_ticklabels(
+            [1987, 1990, 1995, 2000, 2005, 2010, 2015, 2018])
+        for l in color_bar.ax.xaxis.get_ticklabels():
+            l.set_family('Times New Roman')
+            l.set_size(14)
+        color_bar.set_label('地类转移发生年', fontsize=14)
+        plt.savefig(BaseConfig.OUT_PATH + 'LUCC_Net//' + p_topic_var +
+                    '_colorbar_legend.pdf',
+                    bbox_inches='tight',
+                    transparent=True)
+
     # when the width var has negative value, we should show the +- replace the Year
     if p_color_var == 'Sign':
         SIGN_COLOR_DIC = {-1: '#FF69B4', 1: '#4169E1', 0: '#00FFFFFF'}
@@ -435,13 +496,14 @@ def cluster_net(net, p_topic_var):
     cluster a net using some community clustering methods according to edge betweenness
     """
     # This is a method of community clustering method
-    clustered_net = net.community_edge_betweenness(clusters=2,
+    clustered_net = net.community_edge_betweenness(clusters=5,
                                                    directed=True,
                                                    weights='width')
     igraph.plot(clustered_net,
                 BaseConfig.OUT_PATH + 'LUCC_Net//' + p_topic_var +
                 'clustered_Net_Group.pdf',
                 bbox=(1000, 1000),
+                vertex_label=net.vs['name_en'],
                 margin=100)
     igraph.plot(clustered_net.as_clustering(),
                 BaseConfig.OUT_PATH + 'LUCC_Net//' + p_topic_var +
