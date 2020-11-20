@@ -10,7 +10,7 @@
 ### 说明
 
 |文件/文件夹名称|内容|创建日期|备注|
-|:-:|:-:|:-:|:-:|:-:|
+|:-:|:-:|:-:|:-:|
 |<u>**README**<u>|代码库ReadMe|20201014|无|
 |<u>**docs**<u>|代码库说明文档|20201014|无|
 |<u>**preprocessing**<u>|数据预处理模块，包括GeoAgent提取、数据提取和数据修复|20201117|无|
@@ -18,7 +18,7 @@
 |**_GeoAgent_02_Out_Identify_GeoAgent_**|识别GeoAgent并输出|20201111|GEE代码|
 |**_NDeposition-NC_to_tif_**|提取出1981-2020年两种N化合物的沉降数据|20201111|matlab代码|
 |**_NDeposition-Add2tif21_**|两种N化合物的沉降数据加和合成|20201111|matlab代码|
-|**_repair_sta_data_**|插值修复统计Excel数据|20201117|Ronganlly合作|
+|**_repair_sta_data_**|插值修复统计Excel数据|20201118|Ronganlly合作|
 |<u>**yrnetwork**<u>|核心模块，包括核心的类和方法|20201014|无|
 |**_coupled_network_**|耦合网络构建方法和展示|20200000|空白|
 |**_luc_network_**|构建和展示土地利用/覆被转移网络和伴随网络（比如叶面积转移网络）|20201101|无|
