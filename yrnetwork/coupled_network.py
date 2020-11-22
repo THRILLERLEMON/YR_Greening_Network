@@ -1,20 +1,3 @@
-#TODO THRILLER:多要素构建网络
-#TODO THRILLER:需要实现不同时间段不同时间尺度的关系识别
-
-
-# fake code
-def build_coupled_net(p_A_var, p_B_var, p_time_scale, p_time_start,
-                      p_time_end):
-    """
-    build a coupled net for A and B
-    p_time_scale='yearly'
-    p_time_start,p_time_end like 1986 and 2018
-    p_time_scale='yearly'
-    p_time_start,p_time_end like 198601 and 201812
-    """
-    pass
-
-
 from setting import *
 import math
 import time
@@ -22,21 +5,29 @@ import numpy as np
 import pandas as pd
 import scipy.stats as st
 import multiprocessing
+from sklearn import preprocessing
 from geopy.distance import geodesic
 from scipy import ndimage
 from scipy.integrate import dblquad
 from scipy.stats import gaussian_kde
 
-# Input Data
+# Input Data Var
 VARS_LIST = ['precipitation', 'pressure', 'temperature']
 # Load data
 # Data like
-# label  Time1       Time2       Time3       Time4 ...
+# GA_ID  Time1       Time2       Time3       Time4 ...
 # [int]  [double]    [double]    [double]    [double]
 # 00000  0.001       0.002       0.67        1.34
 # 00001  0.003       0.022       0.69        2.34
 # ...    ...         ...         ...         ...
-# This data must have the same index with pointInfo
+# This data must have the same index with GA_Centroid
+
+# The time scale of vars
+VARS_TIME_SCALE_DICT = {
+    'precipitation': 'monthly_yearly',
+    'pressure': 'yearly',
+    'temperature': 'monthly_yearly'
+}
 
 
 def main():
@@ -91,14 +82,13 @@ def main():
 # ******SubFunction******
 def normalize(p_data):
     """
-    normalize data to -1~1
+    normalize data by Z-Score
     @param p_data:
     @return: nomalized data
     """
-    m = np.mean(p_data)
-    mx = max(p_data)
-    mn = min(p_data)
-    return (p_data - m) / (mx - mn)
+    z_score = preprocessing.StandardScaler()
+    data_zs = z_score.fit_transform(p_data)
+    return data_zs
 
 
 def get_geo_distance(p_links, p_centroid_df):
@@ -127,9 +117,15 @@ def get_inner_links(p_var_name):
     @param p_var_name: var name string
     @return:
     """
-    data = pd.read_csv(BaseConfig.COUPLED_NET_DATA_PATH +
-                       BaseConfig.COUPLED_NET_DATA_HEAD + p_var_name +
-                       BaseConfig.COUPLED_NET_DATA_TAIL)
+    data = None
+    if VARS_TIME_SCALE_DICT[p_var_name] == 'yearly':
+        data = pd.read_csv(BaseConfig.COUPLED_NET_DATA_PATH +
+                           BaseConfig.COUPLED_NET_DATA_HEAD + p_var_name +
+                           '_yearly' + BaseConfig.COUPLED_NET_DATA_TAIL)
+    else:
+        data = pd.read_csv(BaseConfig.COUPLED_NET_DATA_PATH +
+                           BaseConfig.COUPLED_NET_DATA_HEAD + p_var_name +
+                           '_monthly' + BaseConfig.COUPLED_NET_DATA_TAIL)
     data_values = data.values
     id_data = data_values[..., 0].astype(np.int32)
     data_values = np.delete(data_values, 0, axis=1)
@@ -169,8 +165,48 @@ def get_mult_links(p_var_sou, p_var_tar):
     @param p_var_tar: target var name
     @return:
     """
-    data_sou = pd.read_csv(VARS_LIST[p_var_sou])
-    data_tar = pd.read_csv(VARS_LIST[p_var_tar])
+    data_sou = None
+    data_tar = None
+    # monthly data
+    if VARS_TIME_SCALE_DICT[p_var_sou] == VARS_TIME_SCALE_DICT[
+            p_var_tar] == 'monthly_yearly':
+        data_sou = pd.read_csv(BaseConfig.COUPLED_NET_DATA_PATH +
+                               BaseConfig.COUPLED_NET_DATA_HEAD + p_var_sou +
+                               '_monthly' + BaseConfig.COUPLED_NET_DATA_TAIL)
+        data_tar = pd.read_csv(BaseConfig.COUPLED_NET_DATA_PATH +
+                               BaseConfig.COUPLED_NET_DATA_HEAD + p_var_tar +
+                               '_monthly' + BaseConfig.COUPLED_NET_DATA_TAIL)
+        sou_times = list(data_sou.columns.values)
+        tar_times = list(data_tar.columns.values)
+        # out put the same columns
+        same_times = []
+        for i_sou_time in sou_times:
+            for i_tar_time in tar_times:
+                if i_sou_time == i_tar_time:
+                    same_times.append(i_sou_time)
+        # update the data to same scale and length
+        data_sou = data_sou[same_times]
+        data_tar = data_tar[same_times]
+    # yearly data
+    else:
+        data_sou = pd.read_csv(BaseConfig.COUPLED_NET_DATA_PATH +
+                               BaseConfig.COUPLED_NET_DATA_HEAD + p_var_sou +
+                               '_yearly' + BaseConfig.COUPLED_NET_DATA_TAIL)
+        data_tar = pd.read_csv(BaseConfig.COUPLED_NET_DATA_PATH +
+                               BaseConfig.COUPLED_NET_DATA_HEAD + p_var_tar +
+                               '_yearly' + BaseConfig.COUPLED_NET_DATA_TAIL)
+        sou_times = list(data_sou.columns.values)
+        tar_times = list(data_tar.columns.values)
+        # out put the same columns
+        same_times = []
+        for i_sou_time in sou_times:
+            for i_tar_time in tar_times:
+                if i_sou_time == i_tar_time:
+                    same_times.append(i_sou_time)
+        # update the data to same scale and length
+        data_sou = data_sou[same_times]
+        data_tar = data_tar[same_times]
+
     data_sou_values = data_sou.values
     data_tar_values = data_tar.values
     id_sou = data_sou_values[..., 0].astype(np.int32)
