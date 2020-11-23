@@ -44,6 +44,33 @@
 
 **目前Ronganlly和Lee任务**  
 >📌1、根据docs/UsedDataVar.xlsx在GEE中提取变量，具体要求和格式与THRILLER交流【Lee】  
+```
+伪代码 
+[下面以一个月、年均为平均的数据为例，注意降水等再月和年上是加和的,需要改]  
+加载GeoAgent和对应数据  
+GeoAgentYearly=GeoAgent.map(addInfoYearly)  
+Export GeoAgentYearly as csv  
+GeoAgentMonthly=GeoAgent.map(addInfoMonthly)  
+Export GeoAgentMonthly as csv  
+
+var addInfoYearly=function(agent)  
+{  
+    for 年 in N年:  
+        var thisYearImageCollection = 对数据集进行时间筛选  
+        var mean_thisYear = thisYearImageCollection.mean()  
+        var 每个GA中每年的平均值 = mean_thisYear.reduceregions({......})  
+        agent=agent.set(ee.String(年) , 每个GA中每年的平均值.get(...))  
+}  
+var addInfoMonthly=function(agent)  
+{  
+    for 年 in N年:  
+        for 月 in 12个月  
+            var thisMonthIC=对数据集进行时间筛选  
+            var mean_thisMonth=thisMonthIC.mean()  
+            var 每个GA中每个月的平均值=mean_thisMonth.reduceregions({......})  
+            agent=agent.set(ee.String(年+月) , 每个GA中每个月的平均值.get(...))  
+}
+```
 >📌2、根据docs/UsedDataVar.xlsx中的N沉降（需要用matlab提取）和CO2数据（需要下载和提取）需要特殊处理【Ronganlly】  
 >📌3、对docs/UsedStaData.xlsx中的数据进行插值处理（1）异常值排查（2）数据填补【Ronganlly：只需要提供方法代码preprocessing/repair_sta_data】  
 >📌4、需要对UsedInvestment开头的文件进行整理，概览论文，然后把Excel中的数据整理成政府对黄河流域投资数据【Lee】  
