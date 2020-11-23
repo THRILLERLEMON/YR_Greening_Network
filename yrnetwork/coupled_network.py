@@ -1,6 +1,7 @@
 from setting import *
 import math
 import time
+import igraph
 import numpy as np
 import pandas as pd
 import scipy.stats as st
@@ -29,10 +30,17 @@ VARS_TIME_SCALE_DICT = {
     'temperature': 'monthly_yearly'
 }
 
+VAR_COLOR_DICT = {
+    'precipitation': '#0023BC',
+    'pressure': '#00BC23',
+    'temperature': '#660000'
+}
 
-def main():
-    # ******Main******
-    print(time.strftime('%H:%M:%S', time.localtime(time.time())))
+
+def build_edges():
+    """
+    build edges from csv data
+    """
     # Load GeoAgent centroid info
     centroid_data = pd.read_csv(BaseConfig.GEO_AGENT_PATH + 'GA_Centroid.csv')
 
@@ -65,22 +73,61 @@ def main():
     print('already complete all links over')
     # save all the Links to a csv
     all_links = pd.concat(kinds_links, ignore_index=True)
-    all_links.to_csv(BaseConfig.OUT_PATH + 'Coupled_Network\\AllLinks.csv')
     print('already concat pd')
-    # Filter links and add distance
-    all_links_filtered = filter_links(all_links)
-    all_links_filtered_dis = get_geo_distance(all_links_filtered,
-                                              centroid_data)
-    all_links_filtered_dis.to_csv(BaseConfig.OUT_PATH +
-                                  'Coupled_Network\\AllLinksFiltered.csv')
-    print('already filter links & add distance')
-
-    print(time.strftime('%H:%M:%S', time.localtime(time.time())))
+    # Add distance
+    all_links_dis = get_geo_distance(all_links, centroid_data)
+    all_links_dis.to_csv(BaseConfig.OUT_PATH + 'Coupled_Network\\AllLinks.csv')
+    print('already add distance and output')
     print('GOOD!')
 
 
+def build_coupled_network():
+    """
+    build coupled network by the edges df from csv
+    """
+    all_edges_df = pd.read_csv(BaseConfig.OUT_PATH +
+                               'Coupled_Network\\AllLinks.csv')
+    all_edges_filtered = filter_edges(all_edges_df)
+    all_edges_filtered.to_csv(BaseConfig.OUT_PATH +
+                              'Coupled_Network\\AllLinks_filtered.csv')
+    print(all_edges_filtered)
+    # build a net network
+    coupled_network = igraph.Graph(directed=True)
+    # add every vertex to the net
+    var_sou = all_edges_filtered['VarSou'].map(str)
+    var_tar = all_edges_filtered['VarTar'].map(str)
+    id_sou = all_edges_filtered['Source'].map(str)
+    id_tar = all_edges_filtered['Target'].map(str)
+    all_edges_filtered['Source_label'] = id_sou + '_' + var_sou
+    all_edges_filtered['Target_label'] = id_tar + '_' + var_tar
+    all_ver_list = list(all_edges_filtered['Source_label']) + list(
+        all_edges_filtered['Target_label'])
+    # set the unique of the vertexs
+    ver_list_unique = list(set(all_ver_list))
+    for v_id_var in ver_list_unique:
+        coupled_network.add_vertex(
+            v_id_var,
+            size=30,
+            label=v_id_var.split('_')[0],
+            color=VAR_COLOR_DICT[v_id_var.split('_')[1]],
+            label_size=15)
+    # set all edges
+    tuples = [
+        tuple(x)
+        for x in all_edges_filtered[['Source_label', 'Target_label']].values
+    ]
+    coupled_network.add_edges(tuples)
+    widths = abs(all_edges_filtered['Correlation_W'] * 1)
+    coupled_network.es['width'] = list(widths)
+    igraph.plot(coupled_network,
+                BaseConfig.OUT_PATH + 'Coupled_Network//Coupled_Network.pdf',
+                bbox=(1200, 1200),
+                layout=coupled_network.layout('large'),
+                margin=200)
+
+
 # ******SubFunction******
-def normalize(p_data):
+def z_score_normaliz(p_data):
     """
     normalize data by Z-Score
     @param p_data:
@@ -130,7 +177,7 @@ def get_inner_links(p_var_name):
     id_data = data_values[..., 0].astype(np.int32)
     data_values = np.delete(data_values, 0, axis=1)
     [agent_num, data_num] = data_values.shape
-    data_values_nor = normalize(data_values)
+    data_values_nor = z_score_normaliz(data_values)
     inner_links = pd.DataFrame(columns=('VarSou', 'VarTar', 'Source', 'Target',
                                         'Pear_r', 'Pear_p', 'Correlation_C',
                                         'Correlation_W', 'MutualInfo'))
@@ -213,8 +260,8 @@ def get_mult_links(p_var_sou, p_var_tar):
     id_tar = data_tar_values[..., 0].astype(np.int32)
     sou_values = np.delete(data_sou_values, 0, axis=1)
     tar_values = np.delete(data_tar_values, 0, axis=1)
-    sou_values_nor = normalize(sou_values)
-    tar_values_nor = normalize(tar_values)
+    sou_values_nor = z_score_normaliz(sou_values)
+    tar_values_nor = z_score_normaliz(tar_values)
     [agent_num, data_num] = sou_values.shape
     mult_links = pd.DataFrame(columns=('VarSou', 'VarTar', 'Source', 'Target',
                                        'Pear_r', 'Pear_p', 'Correlation_C',
@@ -239,32 +286,6 @@ def get_mult_links(p_var_sou, p_var_tar):
                                            ignore_index=True)
     print('Over a Mult Links')
     return mult_links
-
-
-def filter_links(p_links):
-    """
-    filter links by some rules
-    @param Links: links
-    @return:
-    """
-    pear_r = p_links.loc[:, "Pear_r"]
-    pear_p = p_links.loc[:, "Pear_p"]
-    correlation_c = p_links.loc[:, "Correlation_C"]
-    correlation_w = p_links.loc[:, "Correlation_W"]
-    mutual_info = p_links.loc[:, "MutualInfo"]
-    Cdes = correlation_c.describe(percentiles=[0.5]).loc['50%']
-    Wdes = correlation_w.describe(percentiles=[0.5]).loc['50%']
-    Mdes = mutual_info.describe(percentiles=[0.5]).loc['50%']
-    # Filter the Links
-    # 1 Pear_p<1e-10
-    # 2 Correlation_C>Cdes50
-    # 3 Correlation_W>Wdes50
-    # 4 MutualInfo>Mdes50
-    filtered_links = p_links[(p_links["Pear_p"] < 1e-10)
-                             & (p_links["Correlation_C"] > Cdes)
-                             & (p_links["Correlation_W"] > Wdes)
-                             & (p_links["MutualInfo"] > Mdes)].copy()
-    return filtered_links
 
 
 def build_link(p_data_i, p_data_j, p_data_num):
@@ -379,6 +400,36 @@ def mutual_information_2d(x, y, binNum=64, sigma=1, normalized=False):
     return mi
 
 
-# Run main
+def filter_edges(p_edges):
+    """
+    filter edges by some rules
+    @param p_edges: edges
+    @return:
+    """
+    pear_r = p_edges.loc[:, "Pear_r"]
+    pear_p = p_edges.loc[:, "Pear_p"]
+    correlation_c = p_edges.loc[:, "Correlation_C"]
+    correlation_w = p_edges.loc[:, "Correlation_W"]
+    mutual_info = p_edges.loc[:, "MutualInfo"]
+    Cdes = correlation_c.describe(percentiles=[0.5]).loc['50%']
+    Wdes = correlation_w.describe(percentiles=[0.5]).loc['50%']
+    Mdes = mutual_info.describe(percentiles=[0.5]).loc['50%']
+    # Filter the Links
+    # 1 Pear_p<1e-10
+    # 2 Correlation_C>Cdes50
+    # 3 Correlation_W>Wdes50
+    # 4 MutualInfo>Mdes50
+    filtered_edges = p_edges[(p_edges["Pear_p"] < 1e-10)
+                             & (p_edges["Correlation_C"] > Cdes)
+                             & (p_edges["Correlation_W"] > Wdes)
+                             & (p_edges["MutualInfo"] > Mdes)].copy()
+    return filtered_edges
+
+
+# Run Code
 if __name__ == "__main__":
-    main()
+    print(time.strftime('%H:%M:%S', time.localtime(time.time())))
+    # build_edges()
+    print(time.strftime('%H:%M:%S', time.localtime(time.time())))
+    build_coupled_network()
+    print(time.strftime('%H:%M:%S', time.localtime(time.time())))
