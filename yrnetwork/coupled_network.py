@@ -107,22 +107,32 @@ def build_coupled_network():
     for v_id_var in ver_list_unique:
         coupled_network.add_vertex(
             v_id_var,
-            size=30,
+            var_name=v_id_var.split('_')[1],
+            ga_id=v_id_var.split('_')[0],
             label=v_id_var.split('_')[0],
+            size=30,
             color=VAR_COLOR_DICT[v_id_var.split('_')[1]],
             label_size=15)
     # set all edges
-    tuples = [
+    tuples_es = [
         tuple(x)
         for x in all_edges_filtered[['Source_label', 'Target_label']].values
     ]
-    coupled_network.add_edges(tuples)
-    widths = abs(all_edges_filtered['Correlation_W'] * 1)
-    coupled_network.es['width'] = list(widths)
+    coupled_network.add_edges(tuples_es)
+    coupled_network.es['VarSou'] = list(all_edges_filtered['VarSou'])
+    coupled_network.es['VarTar'] = list(all_edges_filtered['VarTar'])
+    coupled_network.es['width'] = list(
+        abs(all_edges_filtered['Correlation_W'] * 1))
     igraph.plot(coupled_network,
                 BaseConfig.OUT_PATH + 'Coupled_Network//Coupled_Network.pdf',
                 bbox=(1200, 1200),
                 layout=coupled_network.layout('large'),
+                margin=200)
+    coupled_net_noinner = remove_inner_net(coupled_network)
+    igraph.plot(coupled_net_noinner,
+                BaseConfig.OUT_PATH +
+                'Coupled_Network//Coupled_Network_noInner.pdf',
+                bbox=(1200, 1200),
                 margin=200)
 
 
@@ -424,6 +434,33 @@ def filter_edges(p_edges):
                              & (p_edges["Correlation_W"] > Wdes)
                              & (p_edges["MutualInfo"] > Mdes)].copy()
     return filtered_edges
+
+
+def get_subgraph(p_father_net, p_var_name):
+    """
+    get subgraph by the var name
+    """
+    # get vs
+    selected_vs = p_father_net.vs.select(var_name=p_var_name)
+    subgraph = p_father_net.induced_subgraph(selected_vs)
+    return subgraph
+
+
+def remove_inner_net(p_father_net):
+    """
+    remove the inner net
+    """
+    del_es = []
+    for e in p_father_net.es:
+        if e['VarSou'] == e['VarTar']:
+            del_es.append(e)
+    p_father_net.delete_edges(del_es)
+    del_vs = []
+    for v in p_father_net.vs:
+        if p_father_net.degree(v) == 0:
+            del_vs.append(v)
+    p_father_net.delete_vertices(del_vs)
+    return p_father_net
 
 
 # Run Code
