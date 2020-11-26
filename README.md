@@ -50,6 +50,7 @@
 >📌1、根据docs/UsedDataVar.xlsx在GEE中提取变量，具体要求和格式与THRILLER交流【Shaylee】  
 ```
 伪代码 
+方案一
 [下面以一个月、年均为平均的数据为例，注意降水等再月和年上是加和的,需要改]  
 加载GeoAgent和对应数据  
 GeoAgentYearly=GeoAgent.map(addInfoYearly)  
@@ -62,7 +63,7 @@ var addInfoYearly=function(agent)
     for 年 in N年:  
         var thisYearImageCollection = 对数据集进行时间筛选  
         var mean_thisYear = thisYearImageCollection.mean()  
-        var 每个GA中每年的平均值 = mean_thisYear.reduceregions({......})  
+        var 每个GA中每年的平均值 = mean_thisYear.reduceregion({agent,......})  
         agent=agent.set(ee.String(年) , 每个GA中每年的平均值.get(...))  
 }  
 var addInfoMonthly=function(agent)  
@@ -71,9 +72,28 @@ var addInfoMonthly=function(agent)
         for 月 in 12个月  
             var thisMonthIC=对数据集进行时间筛选  
             var mean_thisMonth=thisMonthIC.mean()  
-            var 每个GA中每个月的平均值=mean_thisMonth.reduceregions({......})  
+            var 每个GA中每个月的平均值=mean_thisMonth.reduceregion({agent,......})  
             agent=agent.set(ee.String(年+月) , 每个GA中每个月的平均值.get(...))  
 }
+方案二
+var yearsI=[]
+for 年 in N年:  
+    var thisYearImageCollection = 对数据集进行时间筛选  
+    var mean_thisYear = thisYearImageCollection.mean()  
+    yearsI=yearsI.append(mean_thisYear)
+var yearsIC=ee.ImageCollection(yearsI)
+var GAs中每年的平均值=yearsIC.reduceregions({Geoagents,......})  
+export GAs中每年的平均值
+
+var monthsI=[]
+for 年 in N年:  
+    for 月 in 12个月  
+        var thisMonthIC=对数据集进行时间筛选  
+        var mean_thisMonth=thisMonthIC.mean()
+        monthsI=monthsI.append(mean_thisMonth)
+var monthsIC=ee.ImageCollection(monthsI)
+var GAs中每月的平均值=monthsIC.reduceregions({Geoagents,......})  
+export GAs中每月的平均值
 ```
 >📌2、根据docs/UsedDataVar.xlsx中的N沉降（需要用matlab提取）和CO2数据（需要下载和提取）需要特殊处理【Ronganlly】  
 >📌3、对docs/UsedStaData.xlsx中的数据进行插值处理（1）异常值排查（2）数据填补【Ronganlly：只需要提供方法代码preprocessing/repair_sta_data】  
