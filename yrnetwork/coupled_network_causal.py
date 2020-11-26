@@ -1,10 +1,10 @@
 from setting import *
-import math
 import time
 import igraph
 import numpy as np
 import pandas as pd
-import scipy.stats as st
+import networkx as nx
+import matplotlib.pyplot as plt
 import multiprocessing
 from sklearn import preprocessing
 from geopy.distance import geodesic
@@ -87,9 +87,9 @@ def build_edges_to_csv():
     print('GOOD!')
 
 
-def build_coupled_network():
+def build_coupled_network_ig():
     """
-    build coupled network by the edges df from csv
+    build coupled network by the edges df from csv by igraph
     """
     all_edges_df = pd.read_csv(BaseConfig.OUT_PATH +
                                'Coupled_Network\\AllLinks.csv')
@@ -125,17 +125,54 @@ def build_coupled_network():
     coupled_network.es['VarTar'] = list(all_edges_df['VarTar'])
     coupled_network.es['width'] = list(abs(all_edges_df['Strength'] * 1))
     igraph.plot(coupled_network,
-                BaseConfig.OUT_PATH + 'Coupled_Network//Coupled_Network.pdf',
+                BaseConfig.OUT_PATH + 'Coupled_Network//Coupled_Network_ig.pdf',
                 bbox=(1200, 1200),
                 layout=coupled_network.layout('large'),
                 margin=200)
-    coupled_net_noinner = remove_inner_net(coupled_network)
-    igraph.plot(coupled_net_noinner,
-                BaseConfig.OUT_PATH +
-                'Coupled_Network//Coupled_Network_noInner.pdf',
-                bbox=(1200, 1200),
-                margin=200)
+    # coupled_net_noinner = remove_inner_net(coupled_network)
+    # igraph.plot(coupled_net_noinner,
+    #             BaseConfig.OUT_PATH +
+    #             'Coupled_Network//Coupled_Network_noInner.pdf',
+    #             bbox=(1200, 1200),
+    #             margin=200)
 
+
+def build_coupled_network():
+    """
+    build coupled network by the edges df from csv
+    """
+    all_edges_df = pd.read_csv(BaseConfig.OUT_PATH +
+                               'Coupled_Network\\AllLinks.csv')
+    # build a net network
+    coupled_network = nx.MultiDiGraph()
+    # add every vertex to the net
+    var_sou = all_edges_df['VarSou'].map(str)
+    var_tar = all_edges_df['VarTar'].map(str)
+    id_sou = all_edges_df['Source'].map(str)
+    id_tar = all_edges_df['Target'].map(str)
+    all_edges_df['Source_label'] = id_sou + '_' + var_sou
+    all_edges_df['Target_label'] = id_tar + '_' + var_tar
+    all_ver_list = list(all_edges_df['Source_label']) + list(
+        all_edges_df['Target_label'])
+    # set the unique of the vertexs
+    ver_list_unique = list(set(all_ver_list))
+    for v_id_var in ver_list_unique:
+        coupled_network.add_node(v_id_var,
+                   var_name=v_id_var.split('_')[1],
+                   ga_id=v_id_var.split('_')[0],
+                   label=v_id_var.split('_')[0],
+                   size=30,
+                   color=VAR_COLOR_DICT[v_id_var.split('_')[1]],
+                   label_size=15)
+    for lIndex, lRow in all_edges_df.iterrows():
+        thisSou = lRow["Source_label"]
+        thisTar = lRow["Target_label"]
+        coupled_network.add_edge(thisSou, thisTar, weight=lRow['Strength'])
+        # for lf in all_edges_df.columns.values:
+        #     coupled_network.edges[thisSou, thisTar][lf] = lRow[lf]
+    fig = plt.figure(figsize=(20, 15), dpi=300)
+    nx.draw(coupled_network,pos=nx.spring_layout(coupled_network))
+    plt.savefig(BaseConfig.OUT_PATH + 'Coupled_Network//Coupled_Network.pdf')
 
 # ******SubFunction******
 def z_score_normaliz(p_data):
@@ -431,13 +468,13 @@ def build_link_pcmci_noself(p_data_values, p_agent_names, p_var_sou,
     return links_df
 
 
-def get_subgraph(p_father_net, p_var_name):
+def get_sub_inner_net(p_father_net, p_var_name):
     """
     get subgraph by the var name
     """
     # get vs
     selected_vs = p_father_net.vs.select(var_name=p_var_name)
-    subgraph = p_father_net.induced_subgraph(selected_vs)
+    subgraph = p_father_net.subgraph(selected_vs)
     return subgraph
 
 
@@ -461,7 +498,9 @@ def remove_inner_net(p_father_net):
 # Run Code
 if __name__ == "__main__":
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
-    build_edges_to_csv()
+    # build_edges_to_csv()
+    print(time.strftime('%H:%M:%S', time.localtime(time.time())))
+    build_coupled_network_ig()
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
     build_coupled_network()
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
