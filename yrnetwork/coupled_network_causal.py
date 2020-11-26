@@ -1,16 +1,22 @@
 from setting import *
 import time
+import multiprocessing
 import igraph
 import numpy as np
 import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
-import multiprocessing
-from sklearn import preprocessing
-from geopy.distance import geodesic
+import cartopy.crs as ccrs
+import tigramite.data_processing as pp
 from tigramite.pcmci import PCMCI
 from tigramite.independence_tests import ParCorr
-import tigramite.data_processing as pp
+from matplotlib.collections import LineCollection
+from cartopy.io.shapereader import Reader
+from cartopy.feature import ShapelyFeature
+from cartopy.mpl.patch import geos_to_path
+import cartopy.feature as cfeature
+from sklearn import preprocessing
+from geopy.distance import geodesic, lonlat
 
 # Input Data Var
 VARS_LIST = ['precipitation', 'pressure', 'temperature', 'fake1', 'fake2']
@@ -125,16 +131,11 @@ def build_coupled_network_ig():
     coupled_network.es['VarTar'] = list(all_edges_df['VarTar'])
     coupled_network.es['width'] = list(abs(all_edges_df['Strength'] * 1))
     igraph.plot(coupled_network,
-                BaseConfig.OUT_PATH + 'Coupled_Network//Coupled_Network_ig.pdf',
+                BaseConfig.OUT_PATH +
+                'Coupled_Network//Coupled_Network_ig.pdf',
                 bbox=(1200, 1200),
                 layout=coupled_network.layout('large'),
                 margin=200)
-    # coupled_net_noinner = remove_inner_net(coupled_network)
-    # igraph.plot(coupled_net_noinner,
-    #             BaseConfig.OUT_PATH +
-    #             'Coupled_Network//Coupled_Network_noInner.pdf',
-    #             bbox=(1200, 1200),
-    #             margin=200)
 
 
 def build_coupled_network():
@@ -158,21 +159,33 @@ def build_coupled_network():
     ver_list_unique = list(set(all_ver_list))
     for v_id_var in ver_list_unique:
         coupled_network.add_node(v_id_var,
-                   var_name=v_id_var.split('_')[1],
-                   ga_id=v_id_var.split('_')[0],
-                   label=v_id_var.split('_')[0],
-                   size=30,
-                   color=VAR_COLOR_DICT[v_id_var.split('_')[1]],
-                   label_size=15)
+                                 var_name=v_id_var.split('_')[1],
+                                 ga_id=v_id_var.split('_')[0],
+                                 label=v_id_var.split('_')[0],
+                                 size=30,
+                                 color=VAR_COLOR_DICT[v_id_var.split('_')[1]],
+                                 label_size=15)
     for lIndex, lRow in all_edges_df.iterrows():
         thisSou = lRow["Source_label"]
         thisTar = lRow["Target_label"]
         coupled_network.add_edge(thisSou, thisTar, weight=lRow['Strength'])
         # for lf in all_edges_df.columns.values:
         #     coupled_network.edges[thisSou, thisTar][lf] = lRow[lf]
-    fig = plt.figure(figsize=(20, 15), dpi=300)
-    nx.draw(coupled_network,pos=nx.spring_layout(coupled_network))
-    plt.savefig(BaseConfig.OUT_PATH + 'Coupled_Network//Coupled_Network.pdf')
+    draw_net_on_map(coupled_network, 'coupled_network')
+    tem_net = get_sub_inner_net(coupled_network, 'temperature')
+    draw_net_on_map(tem_net, 'tem_net')
+    vars_network = export_vars_network(coupled_network)
+    # print(vars_network.edges())
+    print(vars_network.degree())
+    fig = plt.figure(figsize=(10, 10), dpi=300)
+    pos = nx.spring_layout(vars_network)
+    nx.draw_networkx(vars_network,
+                     pos,
+                     with_labels=False,
+                     connectionstyle="arc3,rad=0.1")
+    # plt.get_current_fig_manager().window.showMaximized()
+    plt.show()
+
 
 # ******SubFunction******
 def z_score_normaliz(p_data):
@@ -472,10 +485,13 @@ def get_sub_inner_net(p_father_net, p_var_name):
     """
     get subgraph by the var name
     """
-    # get vs
-    selected_vs = p_father_net.vs.select(var_name=p_var_name)
-    subgraph = p_father_net.subgraph(selected_vs)
-    return subgraph
+    # get nodes
+    selected_ns = [
+        n for n, d in p_father_net.nodes(data=True)
+        if d['var_name'] == p_var_name
+    ]
+    sub_net = p_father_net.subgraph(selected_ns)
+    return sub_net
 
 
 def remove_inner_net(p_father_net):
@@ -495,12 +511,86 @@ def remove_inner_net(p_father_net):
     return p_father_net
 
 
+def export_vars_network(p_coupled_network):
+    """
+    export vars network by quotient_graph
+    """
+    partitions = []
+    for var in VARS_LIST:
+        partitions.append([
+            n for n, d in p_coupled_network.nodes(data=True)
+            if d['var_name'] == var
+        ])
+
+    block_net = nx.quotient_graph(p_coupled_network, partitions, relabel=False)
+    return block_net
+
+
+def draw_net_on_map(p_network, p_net_name):
+    """
+    draw network on map on YR
+    """
+    fig = plt.figure(figsize=(20, 14), dpi=500)
+    targetPro = ccrs.PlateCarree()
+    ax = fig.add_subplot(1, 1, 1, projection=targetPro)
+    # ax.set_global()
+    # ax.stock_img()
+    ax.add_feature(cfeature.OCEAN.with_scale('50m'))
+    ax.add_feature(cfeature.LAND.with_scale('50m'))
+    ax.add_feature(cfeature.RIVERS.with_scale('50m'))
+    ax.add_feature(cfeature.LAKES.with_scale('50m'))
+    # ax.coastlines(resolution='110m', color='#818487', linewidth=0.5)
+
+    ax.set_extent([95, 120, 31.5, 42])
+
+    geoAgentShpPath = BaseConfig.GEO_AGENT_PATH + 'GA_WGS84.shp'
+
+    geoAgentShp = ShapelyFeature(
+        Reader(geoAgentShpPath).geometries(), ccrs.PlateCarree())
+    ax.add_feature(geoAgentShp,
+                   linewidth=0.5,
+                   facecolor='None',
+                   edgecolor='#4D5459',
+                   alpha=0.8)
+
+    centroid_data = pd.read_csv(BaseConfig.GEO_AGENT_PATH + 'GA_Centroid.csv',
+                                index_col='GA_ID')
+    pos = {}
+    for n, d in p_network.nodes(data=True):
+        # transform lon & lat
+        lon = centroid_data.loc[int(d['ga_id'])]['longitude']
+        lat = centroid_data.loc[int(d['ga_id'])]['latitude']
+        mx, my = targetPro.transform_point(lon, lat, ccrs.PlateCarree())
+        pos[n] = (mx, my)
+
+    nx.draw_networkx_edges(p_network,
+                           pos=pos,
+                           width=0.15,
+                           alpha=0.7,
+                           edge_color=[
+                               float(d['weight'])
+                               for (u, v, d) in p_network.edges(data=True)
+                           ],
+                           edge_cmap=plt.cm.Purples,
+                           arrows=True,
+                           arrowstyle='simple',
+                           arrowsize=2,
+                           connectionstyle="arc3,rad=0.05")
+    nx.draw_networkx_nodes(
+        p_network,
+        pos=pos,
+        node_size=[p_network.degree(n) * 5 for n in p_network],
+        node_color=[d['color'] for n, d in p_network.nodes(data=True)])
+    plt.savefig(BaseConfig.OUT_PATH + 'Coupled_Network//' + p_net_name +
+                '.pdf')
+
+
 # Run Code
 if __name__ == "__main__":
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
     # build_edges_to_csv()
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
-    build_coupled_network_ig()
+    # build_coupled_network_ig()
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
     build_coupled_network()
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
