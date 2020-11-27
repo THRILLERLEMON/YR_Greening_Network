@@ -174,17 +174,17 @@ def build_coupled_network():
     draw_net_on_map(coupled_network, 'coupled_network')
     tem_net = get_sub_inner_net(coupled_network, 'temperature')
     draw_net_on_map(tem_net, 'tem_net')
-    vars_network = export_vars_network(coupled_network)
-    # print(vars_network.edges())
-    print(vars_network.degree())
-    fig = plt.figure(figsize=(10, 10), dpi=300)
-    pos = nx.spring_layout(vars_network)
-    nx.draw_networkx(vars_network,
-                     pos,
-                     with_labels=False,
-                     connectionstyle="arc3,rad=0.1")
-    # plt.get_current_fig_manager().window.showMaximized()
-    plt.show()
+    export_draw_vars_network(coupled_network)
+    export_draw_agents_network(coupled_network)
+    from networkx.readwrite import json_graph
+    import json
+    data1 = json_graph.node_link_data(coupled_network)
+    filename = BaseConfig.OUT_PATH + 'Coupled_Network\\coupled_network.json'
+    with open(filename, 'w') as file_obj:
+        json.dump(data1, file_obj)
+    nx.write_gexf(
+        coupled_network,
+        BaseConfig.OUT_PATH + 'Coupled_Network\\coupled_network.gexf')
 
 
 # ******SubFunction******
@@ -511,19 +511,96 @@ def remove_inner_net(p_father_net):
     return p_father_net
 
 
-def export_vars_network(p_coupled_network):
+def export_draw_vars_network(p_coupled_network):
     """
     export vars network by quotient_graph
     """
+    # group of nodes
     partitions = []
     for var in VARS_LIST:
         partitions.append([
             n for n, d in p_coupled_network.nodes(data=True)
             if d['var_name'] == var
         ])
-
     block_net = nx.quotient_graph(p_coupled_network, partitions, relabel=False)
-    return block_net
+
+    for n, d in block_net.nodes(data=True):
+        var_label = list(n)[0].split('_')[1]
+        block_net.nodes[n]['label'] = var_label
+
+    fig = plt.figure(figsize=(10, 10), dpi=300)
+    ax = plt.gca()
+    pos = nx.circular_layout(block_net)
+    for e in block_net.edges:
+        ax.annotate("",
+                    xy=pos[e[0]],
+                    xycoords='data',
+                    xytext=pos[e[1]],
+                    textcoords='data',
+                    arrowprops=dict(arrowstyle="->",
+                                    color=VAR_COLOR_DICT[list(
+                                        e[0])[0].split('_')[1]],
+                                    shrinkA=3,
+                                    shrinkB=3,
+                                    patchA=None,
+                                    patchB=None,
+                                    connectionstyle="arc3,rad=rrr".replace(
+                                        'rrr', str(0.005 * e[2]))))
+    nx.draw_networkx_nodes(block_net,
+                           pos,
+                           node_size=[
+                               block_net.nodes[n]['nedges'] * 30
+                               for n, d in block_net.nodes(data=True)
+                           ],
+                           node_color=[
+                               VAR_COLOR_DICT[list(n)[0].split('_')[1]]
+                               for n, d in block_net.nodes(data=True)
+                           ],
+                           label=[
+                               block_net.nodes[n]['label']
+                               for n, d in block_net.nodes(data=True)
+                           ])
+    nx.draw_networkx_labels(block_net,
+                            pos,
+                            labels={
+                                n: block_net.nodes[n]['label']
+                                for n, d in block_net.nodes(data=True)
+                            },
+                            font_size=14,
+                            font_color='#0007DA')
+    plt.savefig(BaseConfig.OUT_PATH + 'Coupled_Network//vars_network.pdf')
+
+
+def export_draw_agents_network(p_coupled_network):
+    """
+    export agents network by quotient_graph
+    """
+    all_edges_df = pd.read_csv(BaseConfig.OUT_PATH +
+                               'Coupled_Network\\AllLinks.csv')
+    id_sou = all_edges_df['Source'].map(str)
+    id_tar = all_edges_df['Target'].map(str)
+    all_ver_list = list(id_sou) + list(id_tar)
+    # set the unique of the agents
+    ver_list_unique = list(set(all_ver_list))
+    # group of nodes
+    partitions = []
+
+    for a_id in ver_list_unique:
+        partitions.append([
+            n for n, d in p_coupled_network.nodes(data=True)
+            if d['ga_id'] == a_id
+        ])
+    block_net = nx.quotient_graph(p_coupled_network, partitions, relabel=False)
+    name_mapping = {}
+    for b_node in block_net.nodes:
+        name_mapping[b_node] = list(b_node)[0].split('_')[0]
+        block_net.nodes[b_node]['ga_id'] = list(b_node)[0].split('_')[0]
+        block_net.nodes[b_node]['color'] = 'r'
+        block_net.nodes[b_node]['var_name'] = list(b_node)[0].split('_')[1]
+    for e in block_net.edges:
+        block_net.edges[e]['weight'] = 1
+    nx.relabel_nodes(block_net, name_mapping)
+    draw_net_on_map(block_net, 'Agents_Net')
 
 
 def draw_net_on_map(p_network, p_net_name):
@@ -539,7 +616,6 @@ def draw_net_on_map(p_network, p_net_name):
     ax.add_feature(cfeature.LAND.with_scale('50m'))
     ax.add_feature(cfeature.RIVERS.with_scale('50m'))
     ax.add_feature(cfeature.LAKES.with_scale('50m'))
-    # ax.coastlines(resolution='110m', color='#818487', linewidth=0.5)
 
     ax.set_extent([95, 120, 31.5, 42])
 
@@ -563,19 +639,22 @@ def draw_net_on_map(p_network, p_net_name):
         mx, my = targetPro.transform_point(lon, lat, ccrs.PlateCarree())
         pos[n] = (mx, my)
 
-    nx.draw_networkx_edges(p_network,
-                           pos=pos,
-                           width=0.15,
-                           alpha=0.7,
-                           edge_color=[
-                               float(d['weight'])
-                               for (u, v, d) in p_network.edges(data=True)
-                           ],
-                           edge_cmap=plt.cm.Purples,
-                           arrows=True,
-                           arrowstyle='simple',
-                           arrowsize=2,
-                           connectionstyle="arc3,rad=0.05")
+    nx.draw_networkx_edges(
+        p_network,
+        pos=pos,
+        width=[float(d['weight']) for (u, v, d) in p_network.edges(data=True)],
+        alpha=0.5,
+        # edge_color='k',
+        edge_color=[VAR_COLOR_DICT[p_network.nodes[u]['var_name']] for (u, v, d) in p_network.edges(data=True)],
+        #    edge_color=[
+        #        float(d['weight'])
+        #        for (u, v, d) in p_network.edges(data=True)
+        #    ],
+        #    edge_cmap=plt.cm.Purples,
+        arrows=True,
+        arrowstyle='simple',
+        arrowsize=2,
+        connectionstyle="arc3,rad=0.05")
     nx.draw_networkx_nodes(
         p_network,
         pos=pos,
