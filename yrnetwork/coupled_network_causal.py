@@ -18,7 +18,7 @@ from sklearn import preprocessing
 from geopy.distance import geodesic, lonlat
 
 # Input Data Var
-VARS_LIST = ['LAI', 'soil_temperature_level_1', 'vpd', 'vs', 'temperature_2m']
+VARS_LIST = ['LAI', 'soiltemperaturelevel1', 'vpd', 'vs', 'temperature']
 # Load data
 # Data like
 # GA_ID  Time1       Time2       Time3       Time4 ...
@@ -31,18 +31,18 @@ VARS_LIST = ['LAI', 'soil_temperature_level_1', 'vpd', 'vs', 'temperature_2m']
 # The time scale of vars
 VARS_TIME_SCALE_DICT = {
     'LAI': 'monthly_yearly',
-    'soil_temperature_level_1': 'monthly_yearly',
+    'soiltemperaturelevel1': 'monthly_yearly',
     'vpd': 'yearly',
     'vs': 'yearly',
-    'temperature_2m': 'monthly_yearly'
+    'temperature': 'monthly_yearly'
 }
 
 VAR_COLOR_DICT = {
     'LAI': '#3EC700',
-    'soil_temperature_level_1': '#A13500',
+    'soiltemperaturelevel1': '#A13500',
     'vpd': '#008080',
     'vs': '#002D70',
-    'temperature_2m': '#F9003A'
+    'temperature': '#F9003A'
 }
 
 
@@ -68,7 +68,8 @@ def build_edges_to_csv():
                 print('get_inner_links', var)
             else:
                 if sec_var_index > var_index:
-                    p = new_pool.apply_async(get_outer_links, args=(var, sec_var))
+                    p = new_pool.apply_async(get_outer_links,
+                                             args=(var, sec_var))
                     jobs.append(p)
                     print('get_outer_links', var, sec_var)
             sec_var_index = sec_var_index + 1
@@ -89,6 +90,21 @@ def build_edges_to_csv():
     all_links_dis.to_csv(BaseConfig.OUT_PATH + 'Coupled_Network\\AllLinks.csv')
     print('already add distance and output')
     print('GOOD!')
+
+
+def filter_links(p_links):
+    """
+    filter links by some rules
+    @param p_links:links
+    @return:
+    """
+    strength = p_links.loc[:, 'Strength']
+    # strength_threshold = strength.describe(percentiles=[0.5]).loc['50%']
+    strength_threshold = 0.7
+    filtered_links = p_links[
+        (p_links['Strength'] > strength_threshold)
+        | (p_links['Strength'] < -strength_threshold)].copy()
+    return filtered_links
 
 
 def build_coupled_network_ig():
@@ -142,17 +158,20 @@ def build_coupled_network():
     """
     all_edges_df = pd.read_csv(BaseConfig.OUT_PATH +
                                'Coupled_Network\\AllLinks.csv')
+    filtered_edges_df = filter_links(all_edges_df)
+    filtered_edges_df.to_csv(BaseConfig.OUT_PATH +
+                             'Coupled_Network\\AllLinksFiltered.csv')
     # build a net network
     coupled_network = nx.MultiDiGraph()
     # add every vertex to the net
-    var_sou = all_edges_df['VarSou'].map(str)
-    var_tar = all_edges_df['VarTar'].map(str)
-    id_sou = all_edges_df['Source'].map(str)
-    id_tar = all_edges_df['Target'].map(str)
-    all_edges_df['Source_label'] = id_sou + '_' + var_sou
-    all_edges_df['Target_label'] = id_tar + '_' + var_tar
-    all_ver_list = list(all_edges_df['Source_label']) + list(
-        all_edges_df['Target_label'])
+    var_sou = filtered_edges_df['VarSou'].map(str)
+    var_tar = filtered_edges_df['VarTar'].map(str)
+    id_sou = filtered_edges_df['Source'].map(str)
+    id_tar = filtered_edges_df['Target'].map(str)
+    filtered_edges_df['Source_label'] = id_sou + '_' + var_sou
+    filtered_edges_df['Target_label'] = id_tar + '_' + var_tar
+    all_ver_list = list(filtered_edges_df['Source_label']) + list(
+        filtered_edges_df['Target_label'])
     # set the unique of the vertexs
     ver_list_unique = list(set(all_ver_list))
     for v_id_var in ver_list_unique:
@@ -163,15 +182,16 @@ def build_coupled_network():
                                  size=30,
                                  color=VAR_COLOR_DICT[v_id_var.split('_')[1]],
                                  label_size=15)
-    for lIndex, lRow in all_edges_df.iterrows():
+    for lIndex, lRow in filtered_edges_df.iterrows():
         thisSou = lRow["Source_label"]
         thisTar = lRow["Target_label"]
         coupled_network.add_edge(thisSou, thisTar, weight=lRow['Strength'])
         # for lf in all_edges_df.columns.values:
         #     coupled_network.edges[thisSou, thisTar][lf] = lRow[lf]
     draw_net_on_map(coupled_network, 'coupled_network')
-    tem_net = get_sub_inner_net(coupled_network, 'temperature')
-    draw_net_on_map(tem_net, 'tem_net')
+    for var in VARS_LIST:
+        var_net = get_sub_inner_net(coupled_network, var)
+        draw_net_on_map(var_net, var + '_net')
     export_draw_vars_network(coupled_network)
     export_draw_agents_network(coupled_network)
     from networkx.readwrite import json_graph
@@ -232,7 +252,7 @@ def get_inner_links(p_var_name):
         data = pd.read_csv(BaseConfig.COUPLED_NET_DATA_PATH +
                            BaseConfig.COUPLED_NET_DATA_HEAD + p_var_name +
                            '_monthly' + BaseConfig.COUPLED_NET_DATA_TAIL)
-    data.fillna(value=BaseConfig.BACKGROUND_VALUE)
+    data.fillna(value=BaseConfig.BACKGROUND_VALUE, inplace=True)
     data_values = data.values
     id_data = data_values[..., 0].astype(np.int32)
     var_names = list(map(str, id_data))
@@ -257,11 +277,11 @@ def get_outer_links(p_var_sou, p_var_tar):
         data_sou = pd.read_csv(BaseConfig.COUPLED_NET_DATA_PATH +
                                BaseConfig.COUPLED_NET_DATA_HEAD + p_var_sou +
                                '_monthly' + BaseConfig.COUPLED_NET_DATA_TAIL)
-        data_sou.fillna(value=BaseConfig.BACKGROUND_VALUE)
+        data_sou.fillna(value=BaseConfig.BACKGROUND_VALUE, inplace=True)
         data_tar = pd.read_csv(BaseConfig.COUPLED_NET_DATA_PATH +
                                BaseConfig.COUPLED_NET_DATA_HEAD + p_var_tar +
                                '_monthly' + BaseConfig.COUPLED_NET_DATA_TAIL)
-        data_tar.fillna(value=BaseConfig.BACKGROUND_VALUE)
+        data_tar.fillna(value=BaseConfig.BACKGROUND_VALUE, inplace=True)
         sou_times = list(data_sou.columns.values)
         tar_times = list(data_tar.columns.values)
         # out put the same columns
@@ -282,7 +302,7 @@ def get_outer_links(p_var_sou, p_var_tar):
         data_tar = pd.read_csv(BaseConfig.COUPLED_NET_DATA_PATH +
                                BaseConfig.COUPLED_NET_DATA_HEAD + p_var_tar +
                                '_yearly' + BaseConfig.COUPLED_NET_DATA_TAIL)
-        data_tar.fillna(value=BaseConfig.BACKGROUND_VALUE)
+        data_tar.fillna(value=BaseConfig.BACKGROUND_VALUE, inplace=True)
         sou_times = list(data_sou.columns.values)
         tar_times = list(data_tar.columns.values)
         # out put the same columns
@@ -326,11 +346,11 @@ def get_self_links():
     # out put the same columns
     # make a fake list include all times
     fake_months = []
-    for iyear in np.arange(1970, 2031):
+    for iyear in np.arange(1955, 2030):
         for imonth in np.arange(1, 13):
             fake_months.append(str(iyear) + str(imonth).zfill(2))
     month_times_intersection = list(fake_months)
-    year_times_intersection = list(map(str, np.arange(1970, 2031)))
+    year_times_intersection = list(map(str, np.arange(1955, 2030)))
     for var in VARS_LIST:
         # monthly data
         if VARS_TIME_SCALE_DICT[var] != 'yearly':
@@ -343,15 +363,12 @@ def get_self_links():
                 month_times_intersection).intersection(
                     set(list(var_data.columns.values)))
         # yearly data
-        else:
-            var_data = pd.read_csv(BaseConfig.COUPLED_NET_DATA_PATH +
-                                   BaseConfig.COUPLED_NET_DATA_HEAD + var +
-                                   '_yearly' +
-                                   BaseConfig.COUPLED_NET_DATA_TAIL,
-                                   index_col='GA_ID')
-            year_times_intersection = set(
-                year_times_intersection).intersection(
-                    set(list(var_data.columns.values)))
+        var_data = pd.read_csv(BaseConfig.COUPLED_NET_DATA_PATH +
+                               BaseConfig.COUPLED_NET_DATA_HEAD + var +
+                               '_yearly' + BaseConfig.COUPLED_NET_DATA_TAIL,
+                               index_col='GA_ID')
+        year_times_intersection = set(year_times_intersection).intersection(
+            set(list(var_data.columns.values)))
     # sord them
     month_times_intersection = sorted(list(month_times_intersection))
     year_times_intersection = sorted(list(year_times_intersection))
@@ -371,7 +388,8 @@ def get_self_links():
                     BaseConfig.COUPLED_NET_DATA_HEAD + var + '_monthly' +
                     BaseConfig.COUPLED_NET_DATA_TAIL,
                     index_col='GA_ID')
-                var_data_monthly.fillna(value=BaseConfig.BACKGROUND_VALUE)
+                var_data_monthly.fillna(value=BaseConfig.BACKGROUND_VALUE,
+                                        inplace=True)
                 var_data_monthly = var_data_monthly[list(
                     month_times_intersection)]
                 monthly_vars_data.append(var_data_monthly.loc[agent])
@@ -382,7 +400,7 @@ def get_self_links():
                                    '_yearly' +
                                    BaseConfig.COUPLED_NET_DATA_TAIL,
                                    index_col='GA_ID')
-            var_data.fillna(value=BaseConfig.BACKGROUND_VALUE)
+            var_data.fillna(value=BaseConfig.BACKGROUND_VALUE, inplace=True)
             var_data = var_data[list(year_times_intersection)]
             yearly_vars_data.append(var_data.loc[agent])
             yearly_vars.append(var)
@@ -670,9 +688,9 @@ def draw_net_on_map(p_network, p_net_name):
 # Run Code
 if __name__ == "__main__":
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
-    build_edges_to_csv()
+    # build_edges_to_csv()
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
     # build_coupled_network_ig()
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
-    # build_coupled_network()
+    build_coupled_network()
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
