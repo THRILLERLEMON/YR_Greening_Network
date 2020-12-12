@@ -688,9 +688,7 @@ def draw_net_on_map(p_network, p_net_name):
 # Run Code
 if __name__ == "__main__":
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
-    # build_edges_to_csv()
+    build_edges_to_csv()
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
-    # build_coupled_network_ig()
-    print(time.strftime('%H:%M:%S', time.localtime(time.time())))
-    build_coupled_network()
+    # build_coupled_network()
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
