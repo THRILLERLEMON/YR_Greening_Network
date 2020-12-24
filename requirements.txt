@@ -1,8 +1,0 @@
-#Python版本：Python 3.7.3 64-bit
-
-#需要安装Python模块：
-import numpy
-import pandas
-import igraph
-import pyunicorn
-import matplotlib

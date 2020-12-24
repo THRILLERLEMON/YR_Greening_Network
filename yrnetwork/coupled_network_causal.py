@@ -1,7 +1,7 @@
 from setting import *
 import time
 import multiprocessing
-import igraph
+# import igraph
 import numpy as np
 import pandas as pd
 import networkx as nx
@@ -107,49 +107,49 @@ def filter_links(p_links):
     return filtered_links
 
 
-def build_coupled_network_ig():
-    """
-    build coupled network by the edges df from csv by igraph
-    """
-    all_edges_df = pd.read_csv(BaseConfig.OUT_PATH +
-                               'Coupled_Network\\AllLinks.csv')
-    print(all_edges_df)
-    # build a net network
-    coupled_network = igraph.Graph(directed=True)
-    # add every vertex to the net
-    var_sou = all_edges_df['VarSou'].map(str)
-    var_tar = all_edges_df['VarTar'].map(str)
-    id_sou = all_edges_df['Source'].map(str)
-    id_tar = all_edges_df['Target'].map(str)
-    all_edges_df['Source_label'] = id_sou + '_' + var_sou
-    all_edges_df['Target_label'] = id_tar + '_' + var_tar
-    all_ver_list = list(all_edges_df['Source_label']) + list(
-        all_edges_df['Target_label'])
-    # set the unique of the vertexs
-    ver_list_unique = list(set(all_ver_list))
-    for v_id_var in ver_list_unique:
-        coupled_network.add_vertex(
-            v_id_var,
-            var_name=v_id_var.split('_')[1],
-            ga_id=v_id_var.split('_')[0],
-            label=v_id_var.split('_')[0],
-            size=30,
-            color=VAR_COLOR_DICT[v_id_var.split('_')[1]],
-            label_size=15)
-    # set all edges
-    tuples_es = [
-        tuple(x) for x in all_edges_df[['Source_label', 'Target_label']].values
-    ]
-    coupled_network.add_edges(tuples_es)
-    coupled_network.es['VarSou'] = list(all_edges_df['VarSou'])
-    coupled_network.es['VarTar'] = list(all_edges_df['VarTar'])
-    coupled_network.es['width'] = list(abs(all_edges_df['Strength'] * 1))
-    igraph.plot(coupled_network,
-                BaseConfig.OUT_PATH +
-                'Coupled_Network//Coupled_Network_ig.pdf',
-                bbox=(1200, 1200),
-                layout=coupled_network.layout('large'),
-                margin=200)
+# def build_coupled_network_ig():
+#     """
+#     build coupled network by the edges df from csv by igraph
+#     """
+#     all_edges_df = pd.read_csv(BaseConfig.OUT_PATH +
+#                                'Coupled_Network\\AllLinks.csv')
+#     print(all_edges_df)
+#     # build a net network
+#     coupled_network = igraph.Graph(directed=True)
+#     # add every vertex to the net
+#     var_sou = all_edges_df['VarSou'].map(str)
+#     var_tar = all_edges_df['VarTar'].map(str)
+#     id_sou = all_edges_df['Source'].map(str)
+#     id_tar = all_edges_df['Target'].map(str)
+#     all_edges_df['Source_label'] = id_sou + '_' + var_sou
+#     all_edges_df['Target_label'] = id_tar + '_' + var_tar
+#     all_ver_list = list(all_edges_df['Source_label']) + list(
+#         all_edges_df['Target_label'])
+#     # set the unique of the vertexs
+#     ver_list_unique = list(set(all_ver_list))
+#     for v_id_var in ver_list_unique:
+#         coupled_network.add_vertex(
+#             v_id_var,
+#             var_name=v_id_var.split('_')[1],
+#             ga_id=v_id_var.split('_')[0],
+#             label=v_id_var.split('_')[0],
+#             size=30,
+#             color=VAR_COLOR_DICT[v_id_var.split('_')[1]],
+#             label_size=15)
+#     # set all edges
+#     tuples_es = [
+#         tuple(x) for x in all_edges_df[['Source_label', 'Target_label']].values
+#     ]
+#     coupled_network.add_edges(tuples_es)
+#     coupled_network.es['VarSou'] = list(all_edges_df['VarSou'])
+#     coupled_network.es['VarTar'] = list(all_edges_df['VarTar'])
+#     coupled_network.es['width'] = list(abs(all_edges_df['Strength'] * 1))
+#     igraph.plot(coupled_network,
+#                 BaseConfig.OUT_PATH +
+#                 'Coupled_Network//Coupled_Network_ig.pdf',
+#                 bbox=(1200, 1200),
+#                 layout=coupled_network.layout('large'),
+#                 margin=200)
 
 
 def build_coupled_network():
@@ -688,7 +688,7 @@ def draw_net_on_map(p_network, p_net_name):
 # Run Code
 if __name__ == "__main__":
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
-    build_edges_to_csv()
+    # build_edges_to_csv()
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
-    # build_coupled_network()
+    build_coupled_network()
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))

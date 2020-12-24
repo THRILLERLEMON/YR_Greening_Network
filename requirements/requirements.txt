@@ -1,0 +1,15 @@
+#Python版本：Python 3.7.3 64-bit
+
+#需要安装Python模块：
+import numpy
+import pandas
+import matplotlib
+import networkx
+import cartopy
+import tigramite
+import sklearn
+import geopy
+
+#可能需要的Python模块
+import pyunicorn
+import igraph

@@ -9,8 +9,8 @@
 % 每一维每一次读取的步长)
 close all;clear;clc
 
-NC_pt = 'E:\OFFICE\MTE_NEE_DATA\Backup\N沉降\mstmip_driver_global_hd_nitrogen_nhx_v1.nc4';
-outpt = 'E:\OFFICE\MTE_NEE_DATA\NHx_N_Deposition1982_2011';
+NC_pt = 'F:\Learning\Yanjiusheng1\复杂网络\N沉降数据处理\mstmip_driver_global_hd_nitrogen_nhx_v1.nc4';
+outpt = 'F:\Learning\Yanjiusheng1\复杂网络\N沉降数据处理';
 %NC数据的起始年
 NCy = 1860;
 %要使用的NC数据的变量名称
@@ -20,7 +20,7 @@ nrows = 360;
 ncols = 720;
 lats = [-90,90];
 lons = [-180,180];
-yrs = [1982,2011];
+yrs = [1980,2020];
 bv = -999;
 
 

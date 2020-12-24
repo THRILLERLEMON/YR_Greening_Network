@@ -5,12 +5,12 @@
 clear;close all;clc
 
 %%  input
-var1pt='E:\OFFICE\MTE_NEE_DATA\NHx_N_Deposition1982_2011';
-var2pt='E:\OFFICE\MTE_NEE_DATA\NOy_N_Deposition1982_2011';
+var1pt='F:\Learning\Yanjiusheng1\复杂网络\N沉降数据处理\nhx';
+var2pt='F:\Learning\Yanjiusheng+1\复杂网络\N沉降数据处理\noy';
 var1hd='NHx_N_Deposition_';
 var2hd='NOy_N_Deposition_';
-yrs = [1982,2011];
-outpt='E:\OFFICE\MTE_NEE_DATA\N_Deposition1982_2011'
+yrs = [1980,2020];
+outpt = 'F:\Learning\Yanjiusheng1\复杂网络\N沉降数据处理';
 
 
 Rmat = makerefmat('RasterSize',[360,720],...
