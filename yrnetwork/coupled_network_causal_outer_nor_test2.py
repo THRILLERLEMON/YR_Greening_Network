@@ -1,11 +1,8 @@
-# 🚩实验1：inner 统一输入；outer逐条输入；self统一输入
+# 目前：inner 统一输入；outer逐条输入；self统一输入
 # 结果：inner连边很少；outer连边较多；self不知道
-# 🚩实验2：inner 逐条输入；outer逐条输入；self整体输入
-# 结果： inner连边增多；其他同实验1；证明逐条输入会增加因果识别的宽容度
-# 🚩实验3：inner 统一输入；outer逐条归一化逐条输入；self统一输入
-# 结果： 结果同实验1；证明outer逐条输入时，因果识别方法内部已经有归一化过程了
-# 考虑有二：（1）识别网络的方向问题（2）筛掉结果中的无方向网络（3）改进outer的识别策略
-
+# 🚩实验1：inner逐条输入；outer逐条输入；self整体输入
+# 🚩实验2：inner 统一输入；outer逐条归一化逐条输入；self统一输入
+# 🚩实验3：inner 统一归一化统一输入；outer逐条归一化逐条输入；self逐条归一化统一输入
 
 from setting import *
 from useful_class import *
@@ -25,7 +22,6 @@ from cartopy.io.shapereader import Reader
 from cartopy.feature import ShapelyFeature
 from cartopy.mpl.patch import geos_to_path
 import cartopy.feature as cfeature
-from sklearn import preprocessing
 from geopy.distance import geodesic, lonlat
 
 # Input Data Var
@@ -39,6 +35,7 @@ VARS_LIST = ['LAI', 'soiltemperaturelevel1', 'vpd', 'vs', 'temperature']
 # ...    ...         ...         ...         ...
 # This data must have the same index with GA_Centroid
 
+BaseConfig.OUT_PATH='D://OneDrive//JustDo//The_Greening_of_YR_from_the_Perspective_of_Network//OutPut_outer_nor_test//'
 if not os.path.exists(BaseConfig.OUT_PATH + 'Coupled_Network'):
     os.mkdir(BaseConfig.OUT_PATH + 'Coupled_Network')
 
@@ -232,6 +229,7 @@ def build_coupled_network():
     #     BaseConfig.OUT_PATH + 'Coupled_Network\\coupled_network.gexf')
 
 
+# ******SubFunction******
 def get_geo_distance(p_links, p_centroid_df):
     """
     get distance on earth
@@ -252,31 +250,6 @@ def get_geo_distance(p_links, p_centroid_df):
     return p_links
 
 # 统一输入
-# def get_inner_links(p_var_name):
-#     """
-#     get edgeLinks in same var Layer
-#     @param p_var_name: var name string
-#     @return:
-#     """
-#     data = None
-#     if VARS_TIME_SCALE_DICT[p_var_name] == 'yearly':
-#         data = pd.read_csv(BaseConfig.COUPLED_NET_DATA_PATH +
-#                            BaseConfig.COUPLED_NET_DATA_HEAD + p_var_name +
-#                            '_yearly' + BaseConfig.COUPLED_NET_DATA_TAIL)
-#     else:
-#         data = pd.read_csv(BaseConfig.COUPLED_NET_DATA_PATH +
-#                            BaseConfig.COUPLED_NET_DATA_HEAD + p_var_name +
-#                            '_monthly' + BaseConfig.COUPLED_NET_DATA_TAIL)
-#     data.fillna(value=BaseConfig.BACKGROUND_VALUE, inplace=True)
-#     data_values = data.values
-#     id_data = data_values[..., 0].astype(np.int32)
-#     var_names = list(map(str, id_data))
-#     data_values = np.delete(data_values, 0, axis=1)
-#     inner_links = build_link_pcmci_noself(data_values.T, var_names, p_var_name,
-#                                           p_var_name)
-#     return inner_links
-
-# 逐条输入
 def get_inner_links(p_var_name):
     """
     get edgeLinks in same var Layer
@@ -295,19 +268,44 @@ def get_inner_links(p_var_name):
     data.fillna(value=BaseConfig.BACKGROUND_VALUE, inplace=True)
     data_values = data.values
     id_data = data_values[..., 0].astype(np.int32)
+    var_names = list(map(str, id_data))
     data_values = np.delete(data_values, 0, axis=1)
-    [agent_num, times_num] = data_values.shape
-    one_links = []
-    for i_sou in np.arange(0, agent_num):
-        this_sou = data_values[i_sou, ...]
-        for i_tar in np.arange(0, agent_num - 1):
-            data_2_row = np.array([this_sou, data_values[i_tar, ...]])
-            one_link = build_link_pcmci_noself(data_2_row.T,
-                                               [id_data[i_sou], id_data[i_tar]],
-                                               p_var_name, p_var_name)
-            one_links.append(one_link)
-    inner_links = pd.concat(one_links, ignore_index=True)
+    inner_links = build_link_pcmci_noself(data_values.T, var_names, p_var_name,
+                                          p_var_name)
     return inner_links
+
+# 逐条输入
+# def get_inner_links(p_var_name):
+#     """
+#     get edgeLinks in same var Layer
+#     @param p_var_name: var name string
+#     @return:
+#     """
+#     data = None
+#     if VARS_TIME_SCALE_DICT[p_var_name] == 'yearly':
+#         data = pd.read_csv(BaseConfig.COUPLED_NET_DATA_PATH +
+#                            BaseConfig.COUPLED_NET_DATA_HEAD + p_var_name +
+#                            '_yearly' + BaseConfig.COUPLED_NET_DATA_TAIL)
+#     else:
+#         data = pd.read_csv(BaseConfig.COUPLED_NET_DATA_PATH +
+#                            BaseConfig.COUPLED_NET_DATA_HEAD + p_var_name +
+#                            '_monthly' + BaseConfig.COUPLED_NET_DATA_TAIL)
+#     data.fillna(value=BaseConfig.BACKGROUND_VALUE, inplace=True)
+#     data_values = data.values
+#     id_data = data_values[..., 0].astype(np.int32)
+#     data_values = np.delete(data_values, 0, axis=1)
+#     [agent_num, times_num] = data_values.shape
+#     one_links = []
+#     for i_sou in np.arange(0, agent_num):
+#         this_sou = data_values[i_sou, ...]
+#         for i_tar in np.arange(0, agent_num - 1):
+#             data_2_row = np.array([this_sou, data_values[i_tar, ...]])
+#             one_link = build_link_pcmci_noself(data_2_row.T,
+#                                                [id_data[i_sou], id_data[i_tar]],
+#                                                p_var_name, p_var_name)
+#             one_links.append(one_link)
+#     inner_links = pd.concat(one_links, ignore_index=True)
+#     return inner_links
 
 
 def get_outer_links(p_var_sou, p_var_tar):
@@ -369,10 +367,8 @@ def get_outer_links(p_var_sou, p_var_tar):
     id_tar = data_tar_values[..., 0].astype(np.int32)
     sou_values = np.delete(data_sou_values, 0, axis=1)
     tar_values = np.delete(data_tar_values, 0, axis=1)
-    sou_values_nor = sou_values
-    tar_values_nor = tar_values
-    # sou_values_nor = z_score_normalization(sou_values)
-    # tar_values_nor = z_score_normalization(tar_values)
+    sou_values_nor = z_score_normalization(sou_values)
+    tar_values_nor = z_score_normalization(tar_values)
     [agent_num, times_num] = sou_values.shape
     one_links = []
     for i_sou in np.arange(0, agent_num):
