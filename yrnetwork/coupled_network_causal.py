@@ -1,11 +1,4 @@
-# 🚩实验1：inner 统一输入；outer逐条输入；self统一输入
-# 结果：inner连边很少；outer连边较多；self不知道
-# 🚩实验2：inner 逐条输入；outer逐条输入；self整体输入
-# 结果： inner连边增多；其他同实验1；证明逐条输入会增加因果识别的宽容度
-# 🚩实验3：inner 统一输入；outer逐条归一化逐条输入；self统一输入
-# 结果： 结果同实验1；证明outer逐条输入时，因果识别方法内部已经有归一化过程了
-# 考虑有二：（1）识别网络的方向问题（2）筛掉结果中的无方向网络（3）改进outer的识别策略
-
+# 连边构建策略：inner 逐条输入；outer逐条输入；self整体输入
 
 from setting import *
 from useful_class import *
@@ -115,10 +108,12 @@ def filter_links(p_links):
     strength = p_links.loc[:, 'Strength']
     # strength_threshold = strength.describe(percentiles=[0.5]).loc['50%']
     strength_threshold = 0.5
-    filtered_links = p_links[
+    # select have oriented links
+    filtered_links = p_links[(p_links['Unoriented'] == 0) & (
         (p_links['Strength'] > strength_threshold)
-        | (p_links['Strength'] < -strength_threshold)].copy()
+        | (p_links['Strength'] < -strength_threshold))].copy()
     return filtered_links
+
 
 # 弃用，使用igraph的构建方法
 # def build_coupled_network_ig():
@@ -202,7 +197,7 @@ def build_coupled_network():
         coupled_network.add_edge(thisSou, thisTar, weight=lRow['Strength'])
         # for lf in all_edges_df.columns.values:
         #     coupled_network.edges[thisSou, thisTar][lf] = lRow[lf]
-    # draw_net_on_map(coupled_network, 'coupled_network')
+    draw_net_on_map(coupled_network, 'coupled_network')
 
     # draw all inner and outer net
     var_index = 0
@@ -251,7 +246,8 @@ def get_geo_distance(p_links, p_centroid_df):
         p_links.loc[index, 'Distance'] = dist.km
     return p_links
 
-# 统一输入
+
+# 统一输入获得inner_links
 # def get_inner_links(p_var_name):
 #     """
 #     get edgeLinks in same var Layer
@@ -276,7 +272,8 @@ def get_geo_distance(p_links, p_centroid_df):
 #                                           p_var_name)
 #     return inner_links
 
-# 逐条输入
+
+# 逐条输入获得inner_links
 def get_inner_links(p_var_name):
     """
     get edgeLinks in same var Layer
@@ -302,9 +299,9 @@ def get_inner_links(p_var_name):
         this_sou = data_values[i_sou, ...]
         for i_tar in np.arange(0, agent_num - 1):
             data_2_row = np.array([this_sou, data_values[i_tar, ...]])
-            one_link = build_link_pcmci_noself(data_2_row.T,
-                                               [id_data[i_sou], id_data[i_tar]],
-                                               p_var_name, p_var_name)
+            one_link = build_link_pcmci_noself(
+                data_2_row.T, [id_data[i_sou], id_data[i_tar]], p_var_name,
+                p_var_name)
             one_links.append(one_link)
     inner_links = pd.concat(one_links, ignore_index=True)
     return inner_links
@@ -588,6 +585,7 @@ def remove_inner_net(p_father_net):
             del_vs.append(v)
     p_father_net.delete_vertices(del_vs)
     return p_father_net
+
 
 # 弃用，画出来的图边太多，无可读性
 # def export_draw_vars_network(p_coupled_network):
