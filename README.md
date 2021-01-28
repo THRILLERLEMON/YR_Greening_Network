@@ -37,21 +37,3 @@
 |**_setting_**|工程设置，代码中用到的路径默认参数等设置|20201014|无|
 |**_useful_class_**|代码中用到的外部引用的类或者方法|20201014|无|
 |<u>**main**<u>|代码进行主程序|20201014|目前无效|
-
-### To Do
-
-**✅1、土地利用/覆被转移网络构建和展示———Done！**  
-**✅2、地学智能体识别---Done！**  
-**✅📌3、自然变量提取**  
->Shaylee已完成，Thriller还没有完全查看
-
-**📌4、社会经济变量提取**  
->Ronganlly Doing
-
-**📌5、耦合网络**  
->已建成 by Thriller
-
-**目前Ronganlly和Shaylee任务**  
->📌1、根据docs/UsedDataVar.xlsx中的N沉降（需要用matlab提取）和CO2数据（需要下载和提取）需要特殊处理【Ronganlly】  
->📌2、对docs/UsedStaData.xlsx中的数据进行插值处理（1）异常值排查（2）数据填补【Ronganlly】  
->📌3、需要对UsedInvestment开头的文件进行整理，概览论文，然后把Excel中的数据整理成政府对黄河流域投资数据【Shaylee】  
