@@ -114,6 +114,24 @@ def build_edges_to_csv():
     print('GOOD!')
 
 
+def show_self_nets(p_target_var):
+    self_df = pd.read_csv(BaseConfig.OUT_PATH +
+                          'SelfNetworkCSV//SelfNetworkAll.csv')
+    filtered_df = self_df[(self_df['Unoriented'] == 0)].copy()
+    centroid_data = pd.read_csv(BaseConfig.GEO_AGENT_PATH + 'GA_Centroid.csv')
+    for agent in list(centroid_data['GA_ID']):
+        agent_self_net = nx.DiGraph(
+            build_net_by_csv(
+                filtered_df[(self_df['Source'] == agent)
+                            & (self_df['Target'] == agent)].copy()))
+        all_pre_nodes = agent_self_net.predecessors(
+            str(agent) + '_' + p_target_var)
+        for prenode in all_pre_nodes:
+            print(
+                agent_self_net.get_edge_data(prenode,
+                                             str(agent) + '_' + p_target_var))
+
+
 def show_inner_nets():
     """
     output inner net info
@@ -427,7 +445,6 @@ def filter_links(p_links):
     @param p_links:links
     @return:
     """
-    strength = p_links.loc[:, 'Strength']
     # strength_threshold = strength.describe(percentiles=[0.5]).loc['50%']
     strength_threshold = 0.5
     # select have oriented links
@@ -807,7 +824,7 @@ def build_link_pcmci_noself(p_data_values, p_agent_names, p_var_sou,
     # run PCMCI
     alpha_level = None
     results_pcmci = pcmci.run_pcmciplus(tau_min=0,
-                                        tau_max=2,
+                                        tau_max=3,
                                         pc_alpha=alpha_level)
     # get the result
     graph_pcmci = results_pcmci['graph']
@@ -840,7 +857,7 @@ def build_link_pcmci_noself(p_data_values, p_agent_names, p_var_sou,
             Strength = val_matrix[p[0], j, abs(p[1])]
             Unoriented = None
             if graph_pcmci is not None:
-                if p[1] == 0 and graph_pcmci[j, p[0], 0] == "o-o":
+                if graph_pcmci[j, p[0], 0] == "o-o":
                     Unoriented = 1
                     # "unoriented link"
                 elif graph_pcmci[p[0], j, abs(p[1])] == "x-x":
@@ -848,16 +865,16 @@ def build_link_pcmci_noself(p_data_values, p_agent_names, p_var_sou,
                     # "unclear orientation due to conflict"
                 else:
                     Unoriented = 0
-            links_df = links_df.append(pd.DataFrame({
-                'VarSou': [VarSou],
-                'VarTar': [VarTar],
-                'Source': [Source],
-                'Target': [Target],
-                'TimeLag': [TimeLag],
-                'Strength': [Strength],
-                'Unoriented': [Unoriented]
-            }),
-                                       ignore_index=True)
+                links_df = links_df.append(pd.DataFrame({
+                    'VarSou': [VarSou],
+                    'VarTar': [VarTar],
+                    'Source': [Source],
+                    'Target': [Target],
+                    'TimeLag': [TimeLag],
+                    'Strength': [Strength],
+                    'Unoriented': [Unoriented]
+                }),
+                                           ignore_index=True)
     # remove the self correlation edges
     links_df = links_df.loc[links_df['Source'] != links_df['Target']]
     return links_df
@@ -1127,6 +1144,9 @@ def draw_net_on_map(p_network, p_net_name):
 if __name__ == "__main__":
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
     # build_edges_to_csv()
+    # print(time.strftime('%H:%M:%S', time.localtime(time.time())))
     # show_inner_nets()
+    # print(time.strftime('%H:%M:%S', time.localtime(time.time())))
+    # show_self_nets('LAI')
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
     print('Done! Thriller!')
