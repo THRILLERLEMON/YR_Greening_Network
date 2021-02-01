@@ -12,6 +12,7 @@ import networkx as nx
 from networkx.algorithms import community
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib.patches import FancyArrowPatch, Ellipse
 import cartopy.crs as ccrs
 import tigramite.data_processing as pp
 from tigramite.pcmci import PCMCI
@@ -26,8 +27,8 @@ from geopy.distance import geodesic, lonlat
 # Input Data Var
 VARS_TARGET = ['LAI']
 VARS_LIST_NATURE = [
-    'AirTemperature', 'ETVegetation', 'Precipitation', 'Pressure', 'Runoff',
-    'SoilTemperature', 'SoilWater', 'VPD', 'VS'
+    'Runoff', 'ETVegetation', 'Pressure', 'AirTemperature', 'SoilTemperature',
+    'SoilWater', 'VS', 'Precipitation', 'VPD'
 ]
 VARS_LIST_LUCC = [
     'Forests', 'Shurblands', 'Grasslands', 'Croplands', 'OrchardandTerrace',
@@ -48,6 +49,12 @@ if not os.path.exists(BaseConfig.OUT_PATH + 'InnerNetworkCSV'):
     os.mkdir(BaseConfig.OUT_PATH + 'InnerNetworkCSV')
 if not os.path.exists(BaseConfig.OUT_PATH + 'SelfNetworkCSV'):
     os.mkdir(BaseConfig.OUT_PATH + 'SelfNetworkCSV')
+if not os.path.exists(BaseConfig.OUT_PATH + 'InnerNetCentralityMap'):
+    os.mkdir(BaseConfig.OUT_PATH + 'InnerNetCentralityMap')
+if not os.path.exists(BaseConfig.OUT_PATH + 'InnerNetCommunitiesMap'):
+    os.mkdir(BaseConfig.OUT_PATH + 'InnerNetCommunitiesMap')
+if not os.path.exists(BaseConfig.OUT_PATH + 'SelfNetworkFigs'):
+    os.mkdir(BaseConfig.OUT_PATH + 'SelfNetworkFigs')
 
 # The time scale of vars
 VARS_TIME_SCALE_DICT = {
@@ -92,6 +99,27 @@ VAR_COLOR_DICT = {
     'DesertandLowvegetatedLands': '#9F9F9F'
 }
 
+VAR_LABEL_DICT = {
+    'LAI': 'LAI',
+    'AirTemperature': 'Temp',
+    'ETVegetation': 'ETv',
+    'Precipitation': 'Prcp',
+    'Pressure': 'Prse',
+    'Runoff': 'Runoff',
+    'SoilTemperature': 'SoilTem',
+    'SoilWater': 'SoilWater',
+    'VPD': 'VPD',
+    'VS': 'VS',
+    'Forests': 'Forest',
+    'Shurblands': 'Shurb',
+    'Grasslands': 'Grass',
+    'Croplands': 'Crop',
+    'OrchardandTerrace': 'OT',
+    'UrbanandBuiltup': 'Urban',
+    'WaterBodies': 'Water',
+    'DesertandLowvegetatedLands': 'LowV'
+}
+
 
 def build_edges_to_csv():
     """
@@ -119,17 +147,215 @@ def show_self_nets(p_target_var):
                           'SelfNetworkCSV//SelfNetworkAll.csv')
     filtered_df = self_df[(self_df['Unoriented'] == 0)].copy()
     centroid_data = pd.read_csv(BaseConfig.GEO_AGENT_PATH + 'GA_Centroid.csv')
+    agents_weightiest_var_sp = {}
+    agents_weightiest_var_ap = {}
     for agent in list(centroid_data['GA_ID']):
-        agent_self_net = nx.DiGraph(
-            build_net_by_csv(
+        if agent in list(filtered_df['Source'].unique()):
+            agent_self_net = build_net_by_csv(
                 filtered_df[(self_df['Source'] == agent)
-                            & (self_df['Target'] == agent)].copy()))
-        all_pre_nodes = agent_self_net.predecessors(
-            str(agent) + '_' + p_target_var)
-        for prenode in all_pre_nodes:
-            print(
-                agent_self_net.get_edge_data(prenode,
-                                             str(agent) + '_' + p_target_var))
+                            & (self_df['Target'] == agent)].copy())
+            draw_self_net_for_agent(agent_self_net, agent)
+            agents_weightiest_var_sp[
+                agent] = calculate_shortest_path_causal_var_selfnet(
+                    agent_self_net, agent, p_target_var)
+            agents_weightiest_var_ap[
+                agent] = calculate_all_path_causal_var_selfnet(
+                    agent_self_net, agent, p_target_var)
+        print('agents_weightiest_var_sp')
+        print(agents_weightiest_var_sp)
+        print('agents_weightiest_var_ap')
+        print(agents_weightiest_var_ap)
+
+
+def draw_self_net_for_agent(p_self_net, p_agent_name):
+    """
+    draw self net for a agent
+    """
+    pos_old = nx.circular_layout(p_self_net)
+    pos_new_keys = []
+    for var in VARS_LIST:
+        if str(p_agent_name) + '_' + var in pos_old.keys():
+            pos_new_keys.append(str(p_agent_name) + '_' + var)
+    pos = dict(map(lambda x, y: [x, y], pos_new_keys, pos_old.values()))
+    fig = plt.figure(figsize=(5, 5), dpi=300)
+    # ax = fig.add_subplot(111, frame_on=False)
+    ax = plt.gca()
+    x_values, y_values = zip(*pos.values())
+    x_max = max(x_values)
+    x_min = min(x_values)
+    x_margin = (x_max - x_min) * 0.25
+    plt.xlim(x_min - x_margin, x_max + x_margin)
+    y_max = max(y_values)
+    y_min = min(y_values)
+    y_margin = (y_max - y_min) * 0.25
+    plt.ylim(y_min - y_margin, y_max + y_margin)
+
+    for n, d in p_self_net.nodes(data=True):
+        var_name = str(n).split('_')[1]
+        var_label = VAR_LABEL_DICT[var_name]
+        p_self_net.nodes[n]['label'] = var_label
+        color_edge = VAR_COLOR_DICT[var_name]
+        if var_name in VARS_LIST_LUCC:
+            color_edge = '#454545'
+        c = Ellipse(
+            pos[n],
+            width=0.2,
+            height=0.2,
+            clip_on=False,
+            facecolor=VAR_COLOR_DICT[var_name],
+            edgecolor=color_edge,
+            zorder=0,
+        )
+        ax.add_patch(c)
+        p_self_net.nodes[n]["patch"] = c
+
+    cm = plt.cm.RdBu_r
+    cNorm = matplotlib.colors.Normalize(vmin=-1, vmax=1)
+    for (u, v, d) in p_self_net.edges(data=True):
+        rad = str(0)
+        width = 3
+        if d['timelag'] == 1:
+            rad = str(0.2)
+            width = 2.5
+        elif d['timelag'] >= 2:
+            rad = str(0.3)
+            width = 2
+        e_p = FancyArrowPatch(
+            pos[u],
+            pos[v],
+            arrowstyle='->',
+            connectionstyle='arc3,rad=' + rad,
+            mutation_scale=5,
+            lw=width,
+            alpha=0.8,
+            linestyle='-',
+            color=cm(cNorm(d['weight'])),
+            clip_on=False,
+            patchA=p_self_net.nodes[u]["patch"],
+            patchB=p_self_net.nodes[v]["patch"],
+            shrinkA=0,
+            shrinkB=0,
+            zorder=-1,
+        )
+        ax.add_artist(e_p)
+
+    # nx.draw_networkx_edges(
+    #     p_self_net,
+    #     pos=pos,
+    #     width=4,
+    #     # width=[float(d['weight']) for (u, v, d) in p_self_net.edges(data=True)],
+    #     alpha=0.8,
+    #     style='solid',
+    #     # edge_color='k',
+    #     # edge_color=[
+    #     #     VAR_COLOR_DICT[p_self_net.nodes[u]['var_name']]
+    #     #     for (u, v, d) in p_self_net.edges(data=True)
+    #     # ],
+    #     edge_color=[
+    #         float(d['weight']) for (u, v, d) in p_self_net.edges(data=True)
+    #     ],
+    #     edge_cmap=plt.cm.RdBu_r,
+    #     edge_vmin=-1,
+    #     edge_vmax=1,
+    #     arrows=True,
+    #     arrowstyle='->',
+    #     arrowsize=4,
+    #     connectionstyle="arc3,rad=0.2")
+
+    # nx.draw_networkx_nodes(p_self_net,
+    #                        pos,
+    #                        node_size=600,
+    #                        node_color=[
+    #                            VAR_COLOR_DICT[str(n).split('_')[1]]
+    #                            for n, d in p_self_net.nodes(data=True)
+    #                        ],
+    #                        label=[
+    #                            p_self_net.nodes[n]['label']
+    #                            for n, d in p_self_net.nodes(data=True)
+    #                        ])
+
+    nx.draw_networkx_labels(p_self_net,
+                            pos,
+                            labels={
+                                n: p_self_net.nodes[n]['label']
+                                for n, d in p_self_net.nodes(data=True)
+                            },
+                            font_size=5,
+                            font_color='k')
+    plt.savefig(BaseConfig.OUT_PATH + 'SelfNetworkFigs//' + str(p_agent_name) +
+                '_self_network.pdf',
+                bbox_inches='tight')
+
+
+def calculate_shortest_path_causal_var_selfnet(p_net, p_agent, p_target_var):
+    short_paths = nx.single_target_shortest_path(
+        p_net,
+        str(p_agent) + '_' + p_target_var)
+    del short_paths[str(p_agent) + '_' + p_target_var]
+    if short_paths == {}:
+        return 'Uncertain'
+    causal_strengths = {}
+    for source_n in short_paths:
+        causal_strengths[source_n] = calculate_sum_weight_of_path(
+            p_net, short_paths[source_n])
+    causal_strengths_abs = dict(
+        map(lambda x, y: [x, abs(y)], causal_strengths.keys(),
+            causal_strengths.values()))
+    causal_strengths_abs_sorted = sorted(causal_strengths_abs.items(),
+                                         key=lambda x: x[1],
+                                         reverse=True)
+    weightiest_var = str(causal_strengths_abs_sorted[0][0]).split('_')[1]
+    sign = '+'
+    if np.sign(causal_strengths[causal_strengths_abs_sorted[0][0]]) < 0:
+        sign = '-'
+    return weightiest_var + ':' + str(sign)
+
+
+def calculate_all_path_causal_var_selfnet(p_net, p_agent, p_target_var):
+    causal_strengths = {}
+    for var in VARS_LIST:
+        if var == p_target_var:
+            continue
+        source_n = str(p_agent) + '_' + var
+        if not source_n in p_net.nodes():
+            continue
+        all_paths = nx.all_simple_paths(p_net, source_n,
+                                        str(p_agent) + '_' + p_target_var, 5)
+        strength_sum = 0
+        paths_count = 0
+        for a_path in all_paths:
+            a_path_strength = calculate_sum_weight_of_path(p_net, a_path)
+            strength_sum = strength_sum + a_path_strength
+            paths_count = paths_count + 1
+        if paths_count == 0:
+            continue
+        causal_strengths[source_n] = strength_sum / paths_count
+    if causal_strengths == {}:
+        return 'Uncertain'
+    causal_strengths_abs = dict(
+        map(lambda x, y: [x, abs(y)], causal_strengths.keys(),
+            causal_strengths.values()))
+    causal_strengths_abs_sorted = sorted(causal_strengths_abs.items(),
+                                         key=lambda x: x[1],
+                                         reverse=True)
+    weightiest_var = str(causal_strengths_abs_sorted[0][0]).split('_')[1]
+    sign = '+'
+    if np.sign(causal_strengths[causal_strengths_abs_sorted[0][0]]) < 0:
+        sign = '-'
+    return weightiest_var + ':' + str(sign)
+
+
+def calculate_sum_weight_of_path(p_net, p_nodes_list):
+    sum = 0
+    for i, n_list in enumerate(p_nodes_list):
+        if i == len(p_nodes_list) - 1:
+            break
+        props = p_net[p_nodes_list[i]][p_nodes_list[i + 1]]
+        weights = 0
+        for prop in props.values():
+            weights = weights + prop['weight']
+        sum = sum + weights
+    return sum / (len(p_nodes_list) - 1)
 
 
 def show_inner_nets():
@@ -433,7 +659,10 @@ def build_net_by_csv(p_edges_df):
     for lIndex, lRow in p_edges_df.iterrows():
         thisSou = lRow["Source_label"]
         thisTar = lRow["Target_label"]
-        network.add_edge(thisSou, thisTar, weight=lRow['Strength'])
+        network.add_edge(thisSou,
+                         thisTar,
+                         weight=lRow['Strength'],
+                         timelag=abs(lRow['TimeLag']))
         # for lf in p_edges_df.columns.values:
         #     inner_network.edges[thisSou, thisTar][lf] = lRow[lf]
     return network
@@ -808,6 +1037,62 @@ def get_self_links():
     return self_links
 
 
+def get_self_links_only_year_data():
+    """
+    get self links for every GeoAgent
+    """
+    # out put the same columns
+    year_times_intersection = list(map(str, np.arange(1955, 2030)))
+    for var in VARS_LIST:
+        # yearly data
+        var_data = pd.read_csv(BaseConfig.COUPLED_NET_DATA_PATH +
+                               BaseConfig.COUPLED_NET_DATA_HEAD + var +
+                               '_yearly' + BaseConfig.COUPLED_NET_DATA_TAIL,
+                               index_col='GA_ID')
+        year_times_intersection = set(year_times_intersection).intersection(
+            set(list(var_data.columns.values)))
+    # sord them
+    year_times_intersection = sorted(list(year_times_intersection))
+
+    centroid_data = pd.read_csv(BaseConfig.GEO_AGENT_PATH + 'GA_Centroid.csv')
+    agents_links = []
+    for agent in list(centroid_data['GA_ID']):
+        yearly_vars = []
+        yearly_vars_data = []
+        for var in VARS_LIST:
+            # yearly data
+            var_data = pd.read_csv(BaseConfig.COUPLED_NET_DATA_PATH +
+                                   BaseConfig.COUPLED_NET_DATA_HEAD + var +
+                                   '_yearly' +
+                                   BaseConfig.COUPLED_NET_DATA_TAIL,
+                                   index_col='GA_ID')
+            var_data.fillna(value=BaseConfig.BACKGROUND_VALUE, inplace=True)
+            var_data = var_data[list(year_times_intersection)]
+            same_counts = var_data.loc[agent].value_counts()
+            if same_counts.values.max() < 10:
+                yearly_vars_data.append(var_data.loc[agent])
+                yearly_vars.append(var)
+
+        yearly_data = np.array(yearly_vars_data)
+        # run year data drived links
+        year_data_links = build_link_pcmci_noself(yearly_data.T, yearly_vars,
+                                                  '--', '--')
+        agent_links = year_data_links
+        # change the format of agent_links
+        agent_links['VarSou'] = agent_links['Source']
+        agent_links['VarTar'] = agent_links['Target']
+        agent_links['Source'] = agent
+        agent_links['Target'] = agent
+        agents_links.append(agent_links)
+    self_links = pd.concat(agents_links, ignore_index=True)
+    self_links.to_csv(BaseConfig.OUT_PATH + 'SelfNetworkCSV//' +
+                      'SelfNetworkAll_only_year_data' + '.csv')
+    filtered_edges_df = filter_links(self_links)
+    filtered_edges_df.to_csv(BaseConfig.OUT_PATH + 'SelfNetworkCSV//' +
+                             'SelfNetworkAll_only_year_data_filtered' + '.csv')
+    return self_links
+
+
 def build_link_pcmci_noself(p_data_values, p_agent_names, p_var_sou,
                             p_var_tar):
     """
@@ -851,8 +1136,8 @@ def build_link_pcmci_noself(p_data_values, p_agent_names, p_var_sou,
         for p in sorted_links:
             VarSou = p_var_sou
             VarTar = p_var_tar
-            Source = p_agent_names[j]
-            Target = p_agent_names[p[0]]
+            Source = p_agent_names[p[0]]
+            Target = p_agent_names[j]
             TimeLag = p[1]
             Strength = val_matrix[p[0], j, abs(p[1])]
             Unoriented = None
@@ -1143,10 +1428,11 @@ def draw_net_on_map(p_network, p_net_name):
 # Run Code
 if __name__ == "__main__":
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
-    # build_edges_to_csv()
+    build_edges_to_csv()
     # print(time.strftime('%H:%M:%S', time.localtime(time.time())))
     # show_inner_nets()
     # print(time.strftime('%H:%M:%S', time.localtime(time.time())))
     # show_self_nets('LAI')
+    # get_self_links_only_year_data()
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
     print('Done! Thriller!')

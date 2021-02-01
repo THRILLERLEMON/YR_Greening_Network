@@ -47,7 +47,7 @@ pcmci = PCMCI(dataframe=data_frame,
 
 # run PCMCI
 alpha_level = None
-results_pcmci = pcmci.run_pcmciplus(tau_min=0, tau_max=3, pc_alpha=alpha_level)
+results_pcmci = pcmci.run_pcmciplus(tau_min=0, tau_max=2, pc_alpha=alpha_level)
 # get the result
 graph_pcmci = results_pcmci['graph']
 q_matrix = results_pcmci['q_matrix']
@@ -99,8 +99,8 @@ for j in range(agent_num):
     for p in sorted_links:
         VarSou = p_var_sou
         VarTar = p_var_tar
-        Source = p_agent_names[j]
-        Target = p_agent_names[p[0]]
+        Source = p_agent_names[p[0]]
+        Target = p_agent_names[j]
         TimeLag = p[1]
         Strength = val_matrix[p[0], j, abs(p[1])]
         Unoriented = 0
@@ -114,8 +114,8 @@ for j in range(agent_num):
             links_df = links_df.append(pd.DataFrame({
                 'VarSou': [VarSou],
                 'VarTar': [VarTar],
-                'Source': [Target],
-                'Target': [Source],
+                'Source': [Source],
+                'Target': [Target],
                 'TimeLag': [TimeLag],
                 'Strength': [Strength],
                 'Unoriented': [Unoriented]
