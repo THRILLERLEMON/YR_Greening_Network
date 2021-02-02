@@ -13,6 +13,7 @@ from networkx.algorithms import community
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrowPatch, Ellipse
+from matplotlib.colors import ListedColormap, BoundaryNorm
 import cartopy.crs as ccrs
 import tigramite.data_processing as pp
 from tigramite.pcmci import PCMCI
@@ -154,17 +155,68 @@ def show_self_nets(p_target_var):
             agent_self_net = build_net_by_csv(
                 filtered_df[(self_df['Source'] == agent)
                             & (self_df['Target'] == agent)].copy())
-            draw_self_net_for_agent(agent_self_net, agent)
+            # draw_self_net_for_agent(agent_self_net, agent)
             agents_weightiest_var_sp[
                 agent] = calculate_shortest_path_causal_var_selfnet(
                     agent_self_net, agent, p_target_var)
             agents_weightiest_var_ap[
                 agent] = calculate_all_path_causal_var_selfnet(
                     agent_self_net, agent, p_target_var)
-        print('agents_weightiest_var_sp')
-        print(agents_weightiest_var_sp)
-        print('agents_weightiest_var_ap')
-        print(agents_weightiest_var_ap)
+    draw_self_info(agents_weightiest_var_sp, 'Agents_weightiest_var_sp')
+    draw_self_info(agents_weightiest_var_ap, 'Agents_weightiest_var_ap')
+
+
+def draw_self_info(p_agents_weightiest_var_dict, p_fig_name):
+    # draw map
+    fig = plt.figure(figsize=(20, 14), dpi=500)
+    # [左, 下, 宽, 高] 规定的矩形区域 （全部是0~1之间的数，表示比例）
+    rect_ax = [0, 0.25, 1, 0.75]
+    rectCB = [0.1, 0, 0.8, 0.2]
+
+    geoagent_shp_path = BaseConfig.GEO_AGENT_PATH + 'GA_WGS84.shp'
+    targetPro = ccrs.PlateCarree()
+    # ax = fig.add_subplot(1, 1, 1, projection=targetPro)
+    ax = plt.axes(rect_ax)
+    # ax.set_global()
+    # ax.stock_img()
+    ax.add_feature(cfeature.OCEAN.with_scale('50m'))
+    ax.add_feature(cfeature.LAND.with_scale('50m'))
+    ax.add_feature(cfeature.RIVERS.with_scale('50m'))
+    ax.add_feature(cfeature.LAKES.with_scale('50m'))
+    ax.set_extent([95, 120, 31.5, 42])
+
+    for feature in Reader(geoagent_shp_path).records():
+        ga_id = feature.attributes['GA_ID']
+        polygon_geo = ShapelyFeature(feature.geometry, ccrs.PlateCarree())
+        try:
+            face_color = VAR_COLOR_DICT[str(
+                p_agents_weightiest_var_dict[ga_id]).split(':')[0]]
+        except:
+            face_color = '#737373'
+        ax.add_feature(polygon_geo,
+                       linewidth=0.4,
+                       facecolor=face_color,
+                       edgecolor='#4D5459',
+                       alpha=0.8)
+
+    axCB = plt.axes(rectCB)
+    axCB.spines['top'].set_visible(False)
+    axCB.spines['right'].set_visible(False)
+    axCB.spines['bottom'].set_visible(False)
+    axCB.spines['left'].set_visible(False)
+    cMap = ListedColormap(VAR_COLOR_DICT.values())
+    # cNorm = BoundaryNorm([-0.4, -0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3, 0.4], cMap.N)
+    cb = fig.colorbar(plt.cm.ScalarMappable(cmap=cMap),
+                      ax=axCB,
+                      orientation='horizontal')
+    cb.set_ticklabels(VAR_COLOR_DICT.keys())
+    for l in cb.ax.xaxis.get_ticklabels():
+        l.set_family('Times New Roman')
+        l.set_size(14)
+    cb.set_label('Legend', fontsize=14, fontfamily='Times New Roman')
+
+    plt.savefig(BaseConfig.OUT_PATH + 'SelfNetworkFigs//' + p_fig_name +
+                '.pdf')
 
 
 def draw_self_net_for_agent(p_self_net, p_agent_name):
@@ -288,6 +340,8 @@ def draw_self_net_for_agent(p_self_net, p_agent_name):
 
 
 def calculate_shortest_path_causal_var_selfnet(p_net, p_agent, p_target_var):
+    if not str(p_agent) + '_' + p_target_var in p_net.nodes():
+        return 'Uncertain'
     short_paths = nx.single_target_shortest_path(
         p_net,
         str(p_agent) + '_' + p_target_var)
@@ -1208,67 +1262,6 @@ def remove_inner_net(p_father_net):
     return p_father_net
 
 
-# 弃用，画出来的图边太多，无可读性
-# def export_draw_vars_network(p_coupled_network):
-#     """
-#     export vars network by quotient_graph
-#     """
-#     # group of nodes
-#     partitions = []
-#     for var in VARS_LIST:
-#         partitions.append([
-#             n for n, d in p_coupled_network.nodes(data=True)
-#             if d['var_name'] == var
-#         ])
-#     block_net = nx.quotient_graph(p_coupled_network, partitions, relabel=False)
-
-#     for n, d in block_net.nodes(data=True):
-#         var_label = list(n)[0].split('_')[1]
-#         block_net.nodes[n]['label'] = var_label
-
-#     fig = plt.figure(figsize=(10, 10), dpi=300)
-#     ax = plt.gca()
-#     pos = nx.circular_layout(block_net)
-#     for e in block_net.edges:
-#         ax.annotate("",
-#                     xy=pos[e[0]],
-#                     xycoords='data',
-#                     xytext=pos[e[1]],
-#                     textcoords='data',
-#                     arrowprops=dict(arrowstyle="->",
-#                                     color=VAR_COLOR_DICT[list(
-#                                         e[0])[0].split('_')[1]],
-#                                     shrinkA=3,
-#                                     shrinkB=3,
-#                                     patchA=None,
-#                                     patchB=None,
-#                                     connectionstyle="arc3,rad=rrr".replace(
-#                                         'rrr', str(0.005 * e[2]))))
-#     nx.draw_networkx_nodes(block_net,
-#                            pos,
-#                            node_size=[
-#                                block_net.nodes[n]['nedges'] * 30
-#                                for n, d in block_net.nodes(data=True)
-#                            ],
-#                            node_color=[
-#                                VAR_COLOR_DICT[list(n)[0].split('_')[1]]
-#                                for n, d in block_net.nodes(data=True)
-#                            ],
-#                            label=[
-#                                block_net.nodes[n]['label']
-#                                for n, d in block_net.nodes(data=True)
-#                            ])
-#     nx.draw_networkx_labels(block_net,
-#                             pos,
-#                             labels={
-#                                 n: block_net.nodes[n]['label']
-#                                 for n, d in block_net.nodes(data=True)
-#                             },
-#                             font_size=14,
-#                             font_color='#0007DA')
-#     plt.savefig(BaseConfig.OUT_PATH + 'Coupled_Network//vars_network.pdf')
-
-
 def export_draw_vars_network(p_coupled_network):
     """
     export vars network by quotient_graph
@@ -1428,11 +1421,10 @@ def draw_net_on_map(p_network, p_net_name):
 # Run Code
 if __name__ == "__main__":
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
-    build_edges_to_csv()
+    # build_edges_to_csv()
     # print(time.strftime('%H:%M:%S', time.localtime(time.time())))
     # show_inner_nets()
     # print(time.strftime('%H:%M:%S', time.localtime(time.time())))
-    # show_self_nets('LAI')
-    # get_self_links_only_year_data()
+    show_self_nets('LAI')
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
     print('Done! Thriller!')
