@@ -81,23 +81,23 @@ VARS_TIME_SCALE_DICT = {
 
 VAR_COLOR_DICT = {
     'LAI': '#3EC700',
-    'AirTemperature': '#F9003A',
-    'ETVegetation': '#009999',
-    'Precipitation': '#001384',
-    'Pressure': '#D05300',
-    'Runoff': '#003DF3',
-    'SoilTemperature': '#A13500',
-    'SoilWater': '#9F00B8',
-    'VPD': '#008080',
-    'VS': '#002D70',
-    'Forests': '#1B7201',
-    'Shurblands': '#50FF00',
-    'Grasslands': '#A4D081',
-    'Croplands': '#F2F100',
-    'OrchardandTerrace': '#F29B00',
-    'UrbanandBuiltup': '#F00001',
-    'WaterBodies': '#0058F0',
-    'DesertandLowvegetatedLands': '#9F9F9F'
+    'AirTemperature': '#D62728',
+    'ETVegetation': '#9EDAE5',
+    'Precipitation': '#17BECF',
+    'Pressure': '#A55194',
+    'Runoff': '#5254A3',
+    'SoilTemperature': '#AD494A',
+    'SoilWater': '#9C9EDE',
+    'VPD': '#FF9896',
+    'VS': '#CCEBC5',
+    'Forests': '#2CA02C',
+    'Shurblands': '#BCBD22',
+    'Grasslands': '#8CA252',
+    'Croplands': '#FFD92F',
+    'OrchardandTerrace': '#FF7F0E',
+    'UrbanandBuiltup': '#8C564B',
+    'WaterBodies': '#1F77B4',
+    'DesertandLowvegetatedLands': '#969696'
 }
 
 VAR_LABEL_DICT = {
@@ -150,6 +150,8 @@ def show_self_nets(p_target_var):
     centroid_data = pd.read_csv(BaseConfig.GEO_AGENT_PATH + 'GA_Centroid.csv')
     agents_weightiest_var_sp = {}
     agents_weightiest_var_ap = {}
+    agents_weightiest_var_sp_pos = {}
+    agents_weightiest_var_ap_pos = {}
     for agent in list(centroid_data['GA_ID']):
         if agent in list(filtered_df['Source'].unique()):
             agent_self_net = build_net_by_csv(
@@ -162,10 +164,20 @@ def show_self_nets(p_target_var):
             agents_weightiest_var_ap[
                 agent] = calculate_all_path_causal_var_selfnet(
                     agent_self_net, agent, p_target_var)
+            agents_weightiest_var_sp_pos[
+                agent] = calculate_shortest_path_causal_var_selfnet_pos(
+                    agent_self_net, agent, p_target_var)
+            agents_weightiest_var_ap_pos[
+                agent] = calculate_all_path_causal_var_selfnet_pos(
+                    agent_self_net, agent, p_target_var)
     draw_self_info(agents_weightiest_var_sp,
                    'Agents_weightiest_var_sp_to_' + p_target_var)
     draw_self_info(agents_weightiest_var_ap,
                    'Agents_weightiest_var_ap_to_' + p_target_var)
+    draw_self_info(agents_weightiest_var_sp_pos,
+                   'Agents_weightiest_var_sp_pos_to_' + p_target_var)
+    draw_self_info(agents_weightiest_var_ap_pos,
+                   'Agents_weightiest_var_ap_pos_to_' + p_target_var)
 
 
 def draw_self_info(p_agents_weightiest_var_dict, p_fig_name):
@@ -190,16 +202,26 @@ def draw_self_info(p_agents_weightiest_var_dict, p_fig_name):
     for feature in Reader(geoagent_shp_path).records():
         ga_id = feature.attributes['GA_ID']
         polygon_geo = ShapelyFeature(feature.geometry, ccrs.PlateCarree())
-        try:
+        if p_agents_weightiest_var_dict[ga_id] == 'Uncertain':
+            face_color = 'k'
+            edge_color = 'k'
+        else:
             face_color = VAR_COLOR_DICT[str(
                 p_agents_weightiest_var_dict[ga_id]).split(':')[0]]
-        except:
-            face_color = '#737373'
+            if str(p_agents_weightiest_var_dict[ga_id]).split(':')[1] == '+':
+                edge_color = '#454545'
+                hatch_str = '..'
+            else:
+                edge_color = '#454545'
+                hatch_str = '///'
         ax.add_feature(polygon_geo,
                        linewidth=0.4,
                        facecolor=face_color,
-                       edgecolor='#4D5459',
-                       alpha=0.8)
+                       edgecolor=edge_color,
+                       alpha=1,
+                       hatch=hatch_str
+                       #    linestyle=(0,(5,5)),
+                       )
 
     axCB = plt.axes(rectCB)
     axCB.spines['top'].set_visible(False)
@@ -372,6 +394,28 @@ def calculate_shortest_path_causal_var_selfnet(p_net, p_agent, p_target_var):
         sign = '-'
     return weightiest_var + ':' + str(sign)
 
+def calculate_shortest_path_causal_var_selfnet_pos(p_net, p_agent, p_target_var):
+    if not str(p_agent) + '_' + p_target_var in p_net.nodes():
+        return 'Uncertain'
+    short_paths = nx.single_target_shortest_path(
+        p_net,
+        str(p_agent) + '_' + p_target_var)
+    del short_paths[str(p_agent) + '_' + p_target_var]
+    if short_paths == {}:
+        return 'Uncertain'
+    causal_strengths = {}
+    for source_n in short_paths:
+        causal_strengths[source_n] = calculate_sum_weight_of_path(
+            p_net, short_paths[source_n])
+    causal_strengths_abs_sorted = sorted(causal_strengths.items(),
+                                         key=lambda x: x[1],
+                                         reverse=True)
+    weightiest_var = str(causal_strengths_abs_sorted[0][0]).split('_')[1]
+    sign = '+'
+    if np.sign(causal_strengths[causal_strengths_abs_sorted[0][0]]) < 0:
+        sign = '-'
+    return weightiest_var + ':' + str(sign)
+
 
 def calculate_all_path_causal_var_selfnet(p_net, p_agent, p_target_var):
     causal_strengths = {}
@@ -398,6 +442,36 @@ def calculate_all_path_causal_var_selfnet(p_net, p_agent, p_target_var):
         map(lambda x, y: [x, abs(y)], causal_strengths.keys(),
             causal_strengths.values()))
     causal_strengths_abs_sorted = sorted(causal_strengths_abs.items(),
+                                         key=lambda x: x[1],
+                                         reverse=True)
+    weightiest_var = str(causal_strengths_abs_sorted[0][0]).split('_')[1]
+    sign = '+'
+    if np.sign(causal_strengths[causal_strengths_abs_sorted[0][0]]) < 0:
+        sign = '-'
+    return weightiest_var + ':' + str(sign)
+
+def calculate_all_path_causal_var_selfnet_pos(p_net, p_agent, p_target_var):
+    causal_strengths = {}
+    for var in VARS_LIST:
+        if var == p_target_var:
+            continue
+        source_n = str(p_agent) + '_' + var
+        if not source_n in p_net.nodes():
+            continue
+        all_paths = nx.all_simple_paths(p_net, source_n,
+                                        str(p_agent) + '_' + p_target_var, 5)
+        strength_sum = 0
+        paths_count = 0
+        for a_path in all_paths:
+            a_path_strength = calculate_sum_weight_of_path(p_net, a_path)
+            strength_sum = strength_sum + a_path_strength
+            paths_count = paths_count + 1
+        if paths_count == 0:
+            continue
+        causal_strengths[source_n] = strength_sum / paths_count
+    if causal_strengths == {}:
+        return 'Uncertain'
+    causal_strengths_abs_sorted = sorted(causal_strengths.items(),
                                          key=lambda x: x[1],
                                          reverse=True)
     weightiest_var = str(causal_strengths_abs_sorted[0][0]).split('_')[1]
@@ -691,6 +765,7 @@ def draw_inner_centrality_info(p_var):
 
     plt.savefig(BaseConfig.OUT_PATH + 'InnerNetCentralityMap//' + p_var +
                 '_Centrality_info_Map.pdf')
+    plt.close()
 
 
 def build_net_by_csv(p_edges_df):
