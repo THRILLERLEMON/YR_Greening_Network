@@ -155,28 +155,30 @@ def show_self_nets(p_target_var):
             agent_self_net = build_net_by_csv(
                 filtered_df[(self_df['Source'] == agent)
                             & (self_df['Target'] == agent)].copy())
-            # draw_self_net_for_agent(agent_self_net, agent)
+            draw_self_net_for_agent(agent_self_net, agent)
             agents_weightiest_var_sp[
                 agent] = calculate_shortest_path_causal_var_selfnet(
                     agent_self_net, agent, p_target_var)
             agents_weightiest_var_ap[
                 agent] = calculate_all_path_causal_var_selfnet(
                     agent_self_net, agent, p_target_var)
-    draw_self_info(agents_weightiest_var_sp, 'Agents_weightiest_var_sp')
-    draw_self_info(agents_weightiest_var_ap, 'Agents_weightiest_var_ap')
+    draw_self_info(agents_weightiest_var_sp,
+                   'Agents_weightiest_var_sp_to_' + p_target_var)
+    draw_self_info(agents_weightiest_var_ap,
+                   'Agents_weightiest_var_ap_to_' + p_target_var)
 
 
 def draw_self_info(p_agents_weightiest_var_dict, p_fig_name):
     # draw map
-    fig = plt.figure(figsize=(20, 14), dpi=500)
+    fig = plt.figure(figsize=(20, 15), dpi=500)
     # [左, 下, 宽, 高] 规定的矩形区域 （全部是0~1之间的数，表示比例）
-    rect_ax = [0, 0.25, 1, 0.75]
-    rectCB = [0.1, 0, 0.8, 0.2]
+    rect_ax = [0.1, 0.1, 0.8, 0.78]
+    rectCB = [0, 0.75, 1, 0.2]
 
     geoagent_shp_path = BaseConfig.GEO_AGENT_PATH + 'GA_WGS84.shp'
     targetPro = ccrs.PlateCarree()
-    # ax = fig.add_subplot(1, 1, 1, projection=targetPro)
-    ax = plt.axes(rect_ax)
+    # ax = fig.add_subplot(1, 2, 1, projection=targetPro)
+    ax = plt.axes(rect_ax, projection=targetPro)
     # ax.set_global()
     # ax.stock_img()
     ax.add_feature(cfeature.OCEAN.with_scale('50m'))
@@ -204,16 +206,22 @@ def draw_self_info(p_agents_weightiest_var_dict, p_fig_name):
     axCB.spines['right'].set_visible(False)
     axCB.spines['bottom'].set_visible(False)
     axCB.spines['left'].set_visible(False)
+    axCB.set_xticks([])
+    axCB.set_xticks([])
     cMap = ListedColormap(VAR_COLOR_DICT.values())
-    # cNorm = BoundaryNorm([-0.4, -0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3, 0.4], cMap.N)
-    cb = fig.colorbar(plt.cm.ScalarMappable(cmap=cMap),
+    cNorm = BoundaryNorm(np.arange(1 + cMap.N), cMap.N)
+    cb = fig.colorbar(plt.cm.ScalarMappable(norm=cNorm, cmap=cMap),
                       ax=axCB,
-                      orientation='horizontal')
-    cb.set_ticklabels(VAR_COLOR_DICT.keys())
+                      orientation='horizontal',
+                      aspect=34)
+    cb.set_ticks(np.arange(0.5, 1.5 + cMap.N))
+    cb.set_ticklabels(list(VAR_COLOR_DICT.keys()))
+    cb.set_ticklabels(
+        list({x: VAR_LABEL_DICT[x]
+              for x in list(VAR_COLOR_DICT.keys())}.values()))
     for l in cb.ax.xaxis.get_ticklabels():
         l.set_family('Times New Roman')
-        l.set_size(14)
-    cb.set_label('Legend', fontsize=14, fontfamily='Times New Roman')
+        l.set_size(12)
 
     plt.savefig(BaseConfig.OUT_PATH + 'SelfNetworkFigs//' + p_fig_name +
                 '.pdf')
