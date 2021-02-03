@@ -14,6 +14,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrowPatch, Ellipse
 from matplotlib.colors import ListedColormap, BoundaryNorm
+import matplotlib.patheffects as PathEffects
 import cartopy.crs as ccrs
 import tigramite.data_processing as pp
 from tigramite.pcmci import PCMCI
@@ -35,6 +36,7 @@ VARS_LIST_LUCC = [
     'Forests', 'Shurblands', 'Grasslands', 'Croplands', 'OrchardandTerrace',
     'UrbanandBuiltup', 'WaterBodies', 'DesertandLowvegetatedLands'
 ]
+
 VARS_LIST = VARS_TARGET + VARS_LIST_NATURE + VARS_LIST_LUCC
 
 # Load data
@@ -157,7 +159,7 @@ def show_self_nets(p_target_var):
             agent_self_net = build_net_by_csv(
                 filtered_df[(self_df['Source'] == agent)
                             & (self_df['Target'] == agent)].copy())
-            draw_self_net_for_agent(agent_self_net, agent)
+            # draw_self_net_for_agent(agent_self_net, agent)
             agents_weightiest_var_sp[
                 agent] = calculate_shortest_path_causal_var_selfnet(
                     agent_self_net, agent, p_target_var)
@@ -202,6 +204,7 @@ def draw_self_info(p_agents_weightiest_var_dict, p_fig_name):
     for feature in Reader(geoagent_shp_path).records():
         ga_id = feature.attributes['GA_ID']
         polygon_geo = ShapelyFeature(feature.geometry, ccrs.PlateCarree())
+        hatch_str=''
         if p_agents_weightiest_var_dict[ga_id] == 'Uncertain':
             face_color = 'k'
             edge_color = 'k'
@@ -219,9 +222,7 @@ def draw_self_info(p_agents_weightiest_var_dict, p_fig_name):
                        facecolor=face_color,
                        edgecolor=edge_color,
                        alpha=1,
-                       hatch=hatch_str
-                       #    linestyle=(0,(5,5)),
-                       )
+                       hatch=hatch_str)
 
     axCB = plt.axes(rectCB)
     axCB.spines['top'].set_visible(False)
@@ -295,21 +296,24 @@ def draw_self_net_for_agent(p_self_net, p_agent_name):
     cNorm = matplotlib.colors.Normalize(vmin=-1, vmax=1)
     for (u, v, d) in p_self_net.edges(data=True):
         rad = str(0)
-        width = 3
+        width = 2.5
+        zorder_value = -1
         if d['timelag'] == 1:
-            rad = str(0.2)
-            width = 2.5
-        elif d['timelag'] >= 2:
-            rad = str(0.3)
+            rad = str(-0.2)
             width = 2
+            zorder_value = -2
+        elif d['timelag'] >= 2:
+            rad = str(-0.3)
+            width = 1.5
+            zorder_value = -3
         e_p = FancyArrowPatch(
             pos[u],
             pos[v],
-            arrowstyle='->',
+            arrowstyle='->,head_length=0.4, head_width=0.2',
             connectionstyle='arc3,rad=' + rad,
-            mutation_scale=5,
+            mutation_scale=10,
             lw=width,
-            alpha=0.8,
+            alpha=0.9,
             linestyle='-',
             color=cm(cNorm(d['weight'])),
             clip_on=False,
@@ -317,9 +321,31 @@ def draw_self_net_for_agent(p_self_net, p_agent_name):
             patchB=p_self_net.nodes[v]["patch"],
             shrinkA=0,
             shrinkB=0,
-            zorder=-1,
+            zorder=zorder_value,
         )
         ax.add_artist(e_p)
+
+        # Attach labels of lags
+        if d['timelag'] != 0:
+            trans = None
+            path = e_p.get_path()
+            verts = path.to_polygons(trans)[0]
+            if len(verts) > 2:
+                label_vert = verts[1, :]
+                string = str(d['timelag'])
+                txt = ax.text(
+                    label_vert[0],
+                    label_vert[1],
+                    string,
+                    fontsize=4,
+                    verticalalignment="center",
+                    horizontalalignment="center",
+                    color="w",
+                    alpha=0.8,
+                    zorder=2,
+                )
+                txt.set_path_effects(
+                    [PathEffects.withStroke(linewidth=0.5, foreground="k")])
 
     # nx.draw_networkx_edges(
     #     p_self_net,
@@ -394,7 +420,9 @@ def calculate_shortest_path_causal_var_selfnet(p_net, p_agent, p_target_var):
         sign = '-'
     return weightiest_var + ':' + str(sign)
 
-def calculate_shortest_path_causal_var_selfnet_pos(p_net, p_agent, p_target_var):
+
+def calculate_shortest_path_causal_var_selfnet_pos(p_net, p_agent,
+                                                   p_target_var):
     if not str(p_agent) + '_' + p_target_var in p_net.nodes():
         return 'Uncertain'
     short_paths = nx.single_target_shortest_path(
@@ -450,6 +478,7 @@ def calculate_all_path_causal_var_selfnet(p_net, p_agent, p_target_var):
         sign = '-'
     return weightiest_var + ':' + str(sign)
 
+
 def calculate_all_path_causal_var_selfnet_pos(p_net, p_agent, p_target_var):
     causal_strengths = {}
     for var in VARS_LIST:
@@ -498,10 +527,18 @@ def show_inner_nets():
     """
     output inner net info
     """
-    # draw inner net centrality info in GIS
+    # # draw inner net centrality info in GIS
+    # new_pool = multiprocessing.Pool()
+    # for var in VARS_LIST:
+    #     p = new_pool.apply_async(draw_inner_centrality_info, args=(var, ))
+    #     print('draw_inner_info_in_GIS:', var)
+    # new_pool.close()
+    # new_pool.join()
+
+    # draw inner net communities info in GIS
     new_pool = multiprocessing.Pool()
     for var in VARS_LIST:
-        p = new_pool.apply_async(draw_inner_centrality_info, args=(var, ))
+        p = new_pool.apply_async(draw_inner_communities_info, args=(var, ))
         print('draw_inner_info_in_GIS:', var)
     new_pool.close()
     new_pool.join()
@@ -521,14 +558,6 @@ def show_inner_nets():
     nets_info = pd.concat(kinds_links, ignore_index=True)
     nets_info.to_csv(BaseConfig.OUT_PATH + 'All_Inner_Nets_Info.csv')
 
-    # draw inner net communities in GIS
-    new_pool = multiprocessing.Pool()
-    for var in VARS_LIST:
-        p = new_pool.apply_async(draw_inner_communities_info, args=(var, ))
-        print('draw_inner_communities_info:', var)
-    new_pool.close()
-    new_pool.join()
-
 
 def get_inner_info_by_var(p_var):
     """
@@ -540,23 +569,25 @@ def get_inner_info_by_var(p_var):
     var_inner_net = build_net_by_csv(var_inner_df)
 
     net_info = net_info.append(
-        pd.DataFrame({
-            'Name':
-            'Inner Net of' + p_var,
-            'Number of nodes':
-            nx.number_of_nodes(var_inner_net),
-            'Number of edges':
-            nx.number_of_edges(var_inner_net),
-            'Average Node Degree':
-            sum(d for n, d in var_inner_net.degree()) /
-            float(nx.number_of_nodes(var_inner_net)),
-            'Density':
-            nx.density(var_inner_net),
-            'Transitivity':
-            nx.transitivity(nx.DiGraph(var_inner_net)),
-            'Average Node Connectivity':
-            nx.average_node_connectivity(var_inner_net),
-        }))
+        pd.DataFrame(
+            {
+                'Name':
+                'Inner Net of ' + p_var,
+                'Number of nodes':
+                nx.number_of_nodes(var_inner_net),
+                'Number of edges':
+                nx.number_of_edges(var_inner_net),
+                'Average Node Degree':
+                sum(d for n, d in var_inner_net.degree()) /
+                float(nx.number_of_nodes(var_inner_net)),
+                'Density':
+                nx.density(var_inner_net),
+                'Transitivity':
+                nx.transitivity(nx.DiGraph(var_inner_net)),
+                'Average Node Connectivity':
+                nx.average_node_connectivity(var_inner_net),
+            },
+            index=[0]))
     return net_info
 
 
@@ -1144,14 +1175,19 @@ def get_self_links():
             if same_counts.values.max() < 10:
                 yearly_vars_data.append(var_data.loc[agent])
                 yearly_vars.append(var)
+        month_data_links = pd.DataFrame()
+        year_data_links = pd.DataFrame()
         monthly_data = np.array(monthly_vars_data)
         # run month data drived links
-        month_data_links = build_link_pcmci_noself(monthly_data.T,
-                                                   monthly_vars, '--', '--')
+        if monthly_data != []:
+            month_data_links = build_link_pcmci_noself(monthly_data.T,
+                                                       monthly_vars, '--',
+                                                       '--')
         yearly_data = np.array(yearly_vars_data)
         # run year data drived links
-        year_data_links = build_link_pcmci_noself(yearly_data.T, yearly_vars,
-                                                  '--', '--')
+        if yearly_data != []:
+            year_data_links = build_link_pcmci_noself(yearly_data.T,
+                                                      yearly_vars, '--', '--')
         # move the yearly var links to the month data network
         only_yearly_vars = list(set(yearly_vars).difference(set(monthly_vars)))
         links_of_yearl_var = year_data_links.loc[
@@ -1223,10 +1259,10 @@ def get_self_links_only_year_data():
         agents_links.append(agent_links)
     self_links = pd.concat(agents_links, ignore_index=True)
     self_links.to_csv(BaseConfig.OUT_PATH + 'SelfNetworkCSV//' +
-                      'SelfNetworkAll_only_year_data' + '.csv')
+                      'SelfNetworkAll' + '.csv')
     filtered_edges_df = filter_links(self_links)
     filtered_edges_df.to_csv(BaseConfig.OUT_PATH + 'SelfNetworkCSV//' +
-                             'SelfNetworkAll_only_year_data_filtered' + '.csv')
+                             'SelfNetworkAll_filtered' + '.csv')
     return self_links
 
 
@@ -1507,7 +1543,7 @@ if __name__ == "__main__":
     # build_edges_to_csv()
     # print(time.strftime('%H:%M:%S', time.localtime(time.time())))
     # show_inner_nets()
-    # print(time.strftime('%H:%M:%S', time.localtime(time.time())))
+    print(time.strftime('%H:%M:%S', time.localtime(time.time())))
     show_self_nets('LAI')
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
     print('Done! Thriller!')
