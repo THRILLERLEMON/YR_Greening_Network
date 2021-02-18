@@ -20,8 +20,6 @@ from sklearn import preprocessing
 from geopy.distance import geodesic, lonlat
 from tigramite import plotting as tp
 
-# def build_link_pcmci_noself(p_data_values, p_agent_names, p_var_sou,
-# p_var_tar):
 dataaa = pd.read_csv('E:\\MY PROGRAM\\YR_Greening_Network\\data\\selfNetSample.csv')
 p_data_values = dataaa.values
 p_agent_names = [
@@ -56,23 +54,6 @@ val_matrix = results_pcmci['val_matrix']
 conf_matrix = results_pcmci['conf_matrix']
 ambiguous_triples = results_pcmci['ambiguous_triples']
 
-# Only draw link in one direction among contemp
-# Remove lower triangle
-# print(graph_pcmci)
-# print(graph_pcmci.shape)
-
-# link_matrix_upper = np.copy(graph_pcmci)
-# link_matrix_upper[:, :, 0] = np.triu(link_matrix_upper[:, :, 0])
-# graph_pcmci = link_matrix_upper
-
-# print(graph_pcmci)
-# print('------------------')
-# print(link_matrix_upper)
-
-# # net = _get_absmax(link_matrix != "")
-# net = np.any(link_matrix_upper != "", axis=2)
-# print(net)
-# G = nx.DiGraph(net)
 
 pcmci.print_significant_links(p_matrix=results_pcmci['p_matrix'],
                               q_matrix=q_matrix,
@@ -124,6 +105,7 @@ for j in range(agent_num):
 # remove the self correlation edges
 links_df = links_df.loc[links_df['Source'] != links_df['Target']]
 print(links_df.sort_values(by=['Source', 'Target']))
+links_df.to_csv('C:\\Users\\thril\\Desktop\\123.csv')
 
 # print(graph_pcmci)
 
