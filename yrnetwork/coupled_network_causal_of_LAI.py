@@ -32,6 +32,7 @@ VARS_LIST_NATURE = [
     'Runoff', 'ETVegetation', 'Pressure', 'AirTemperature', 'SoilTemperature',
     'SoilWater', 'VS', 'Precipitation', 'VPD'
 ]
+# VARS_LIST_LUCC = ['LUCD']
 VARS_LIST_LUCC = [
     'Forests', 'Shurblands', 'Grasslands', 'Croplands', 'OrchardandTerrace',
     'UrbanandBuiltup', 'WaterBodies', 'DesertandLowvegetatedLands'
@@ -78,7 +79,8 @@ VARS_TIME_SCALE_DICT = {
     'OrchardandTerrace': 'yearly',
     'UrbanandBuiltup': 'yearly',
     'WaterBodies': 'yearly',
-    'DesertandLowvegetatedLands': 'yearly'
+    'DesertandLowvegetatedLands': 'yearly',
+    # 'LUCD': 'yearly'
 }
 
 VAR_COLOR_DICT = {
@@ -99,7 +101,8 @@ VAR_COLOR_DICT = {
     'OrchardandTerrace': '#FF7F0E',
     'UrbanandBuiltup': '#8C564B',
     'WaterBodies': '#1F77B4',
-    'DesertandLowvegetatedLands': '#969696'
+    'DesertandLowvegetatedLands': '#969696',
+    # 'LUCD': '#FF60ED'
 }
 
 VAR_LABEL_DICT = {
@@ -120,7 +123,8 @@ VAR_LABEL_DICT = {
     'OrchardandTerrace': 'OT',
     'UrbanandBuiltup': 'Urban',
     'WaterBodies': 'Water',
-    'DesertandLowvegetatedLands': 'LowV'
+    'DesertandLowvegetatedLands': 'LowV',
+    # 'LUCD': 'LUCD'
 }
 
 
@@ -159,7 +163,7 @@ def show_self_nets(p_target_var):
             agent_self_net = build_net_by_csv(
                 filtered_df[(self_df['Source'] == agent)
                             & (self_df['Target'] == agent)].copy())
-            # draw_self_net_for_agent(agent_self_net, agent)
+            draw_self_net_for_agent(agent_self_net, agent)
             agents_weightiest_var_sp[
                 agent] = calculate_shortest_path_causal_var_selfnet(
                     agent_self_net, agent, p_target_var)
@@ -204,7 +208,7 @@ def draw_self_info(p_agents_weightiest_var_dict, p_fig_name):
     for feature in Reader(geoagent_shp_path).records():
         ga_id = feature.attributes['GA_ID']
         polygon_geo = ShapelyFeature(feature.geometry, ccrs.PlateCarree())
-        hatch_str=''
+        hatch_str = ''
         if p_agents_weightiest_var_dict[ga_id] == 'Uncertain':
             face_color = 'k'
             edge_color = 'k'
@@ -1541,6 +1545,7 @@ def draw_net_on_map(p_network, p_net_name):
 if __name__ == "__main__":
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
     # build_edges_to_csv()
+    # get_self_links()
     # print(time.strftime('%H:%M:%S', time.localtime(time.time())))
     # show_inner_nets()
     print(time.strftime('%H:%M:%S', time.localtime(time.time())))
