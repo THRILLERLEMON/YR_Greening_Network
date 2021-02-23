@@ -154,28 +154,22 @@ def show_self_nets(p_target_var):
                           'SelfNetworkCSV//SelfNetworkAll.csv')
     filtered_df = self_df[(self_df['Unoriented'] == 0)].copy()
     centroid_data = pd.read_csv(BaseConfig.GEO_AGENT_PATH + 'GA_Centroid.csv')
-    agents_weightiest_var_sp = {}
-    agents_weightiest_var_ap = {}
-    agents_weightiest_var_sp_pos = {}
-    agents_weightiest_var_ap_pos = {}
     for agent in list(centroid_data['GA_ID']):
         if agent in list(filtered_df['Source'].unique()):
             agent_self_net = build_net_by_csv(
-                filtered_df[(self_df['Source'] == agent)
-                            & (self_df['Target'] == agent)].copy())
-            draw_self_net_for_agent(agent_self_net, agent)
-            agents_weightiest_var_sp[
-                agent] = calculate_shortest_path_causal_var_selfnet(
-                    agent_self_net, agent, p_target_var)
-            agents_weightiest_var_ap[
-                agent] = calculate_all_path_causal_var_selfnet(
-                    agent_self_net, agent, p_target_var)
-            agents_weightiest_var_sp_pos[
-                agent] = calculate_shortest_path_causal_var_selfnet_pos(
-                    agent_self_net, agent, p_target_var)
-            agents_weightiest_var_ap_pos[
-                agent] = calculate_all_path_causal_var_selfnet_pos(
-                    agent_self_net, agent, p_target_var)
+                filtered_df[(filtered_df['Source'] == agent)
+                            & (filtered_df['Target'] == agent)].copy())
+            # draw_self_net_for_agent(agent_self_net, agent)
+
+    agents_weightiest_var_sp = calculate_shortest_path_causal_var_selfnet(
+        filtered_df, p_target_var)
+    agents_weightiest_var_ap = calculate_all_path_causal_var_selfnet(
+        filtered_df, p_target_var)
+    agents_weightiest_var_sp_pos = calculate_shortest_path_causal_var_selfnet_pos(
+        filtered_df, p_target_var)
+    agents_weightiest_var_ap_pos = calculate_all_path_causal_var_selfnet_pos(
+        filtered_df, p_target_var)
+
     draw_self_info(agents_weightiest_var_sp,
                    'Agents_weightiest_var_sp_to_' + p_target_var)
     draw_self_info(agents_weightiest_var_ap,
@@ -209,13 +203,20 @@ def draw_self_info(p_agents_weightiest_var_dict, p_fig_name):
         ga_id = feature.attributes['GA_ID']
         polygon_geo = ShapelyFeature(feature.geometry, ccrs.PlateCarree())
         hatch_str = ''
+        weightiest_var = ''
+        strength_sign = ''
         if p_agents_weightiest_var_dict[ga_id] == 'Uncertain':
             face_color = 'k'
             edge_color = 'k'
+            weightiest_var = 'Uncertain'
+            strength_sign = 'Uncertain'
         else:
-            face_color = VAR_COLOR_DICT[str(
-                p_agents_weightiest_var_dict[ga_id]).split(':')[0]]
-            if str(p_agents_weightiest_var_dict[ga_id]).split(':')[1] == '+':
+            weightiest_var = str(
+                p_agents_weightiest_var_dict[ga_id]).split(':')[0]
+            strength_sign = str(
+                p_agents_weightiest_var_dict[ga_id]).split(':')[1]
+            face_color = VAR_COLOR_DICT[weightiest_var]
+            if strength_sign == '+':
                 edge_color = '#454545'
                 hatch_str = '..'
             else:
@@ -399,119 +400,284 @@ def draw_self_net_for_agent(p_self_net, p_agent_name):
                 bbox_inches='tight')
 
 
-def calculate_shortest_path_causal_var_selfnet(p_net, p_agent, p_target_var):
-    if not str(p_agent) + '_' + p_target_var in p_net.nodes():
-        return 'Uncertain'
-    short_paths = nx.single_target_shortest_path(
-        p_net,
-        str(p_agent) + '_' + p_target_var)
-    del short_paths[str(p_agent) + '_' + p_target_var]
-    if short_paths == {}:
-        return 'Uncertain'
-    causal_strengths = {}
-    for source_n in short_paths:
-        causal_strengths[source_n] = calculate_sum_weight_of_path(
-            p_net, short_paths[source_n])
-    causal_strengths_abs = dict(
-        map(lambda x, y: [x, abs(y)], causal_strengths.keys(),
-            causal_strengths.values()))
-    causal_strengths_abs_sorted = sorted(causal_strengths_abs.items(),
-                                         key=lambda x: x[1],
-                                         reverse=True)
-    weightiest_var = str(causal_strengths_abs_sorted[0][0]).split('_')[1]
-    sign = '+'
-    if np.sign(causal_strengths[causal_strengths_abs_sorted[0][0]]) < 0:
-        sign = '-'
-    return weightiest_var + ':' + str(sign)
+def calculate_shortest_path_causal_var_selfnet(p_filtered_df, p_target_var):
+    centroid_data = pd.read_csv(BaseConfig.GEO_AGENT_PATH + 'GA_Centroid.csv')
+    agents_weightiest_var_sp = {}
+    weightiest_info_df = pd.DataFrame(
+    columns=['GA_ID', 'Weightiest_var', 'Strength_sign'])
+    for agent in list(centroid_data['GA_ID']):
+        if agent in list(p_filtered_df['Source'].unique()):
+            agent_self_net = build_net_by_csv(
+                p_filtered_df[(p_filtered_df['Source'] == agent)
+                              & (p_filtered_df['Target'] == agent)].copy())
+            if not str(agent) + '_' + p_target_var in agent_self_net.nodes():
+                agents_weightiest_var_sp[agent] = 'Uncertain'
+                continue
+            short_paths = nx.single_target_shortest_path(
+                agent_self_net,
+                str(agent) + '_' + p_target_var)
+            del short_paths[str(agent) + '_' + p_target_var]
+            if short_paths == {}:
+                agents_weightiest_var_sp[agent] = 'Uncertain'
+                continue
+            causal_strengths = {}
+            for source_n in short_paths:
+                causal_strengths[source_n] = calculate_sum_weight_of_path(
+                    agent_self_net, short_paths[source_n])
+                length_filed = 'Shortest_path_from_' + str(source_n).split(
+                    '_')[1] + '_length'
+                strength_field = 'Shortest_path_from_' + str(source_n).split(
+                    '_')[1] + '_strength'
+                if length_filed not in weightiest_info_df.columns:
+                    weightiest_info_df[length_filed] = None
+                    weightiest_info_df.loc[agent, length_filed] = len(
+                        short_paths[source_n])
+                else:
+                    weightiest_info_df.loc[agent, length_filed] = len(
+                        short_paths[source_n])
+
+                if strength_field not in weightiest_info_df.columns:
+                    weightiest_info_df[strength_field] = None
+                    weightiest_info_df.loc[
+                        agent, strength_field] = causal_strengths[source_n]
+                else:
+                    weightiest_info_df.loc[
+                        agent, strength_field] = causal_strengths[source_n]
+            causal_strengths_abs = dict(
+                map(lambda x, y: [x, abs(y)], causal_strengths.keys(),
+                    causal_strengths.values()))
+            causal_strengths_abs_sorted = sorted(causal_strengths_abs.items(),
+                                                 key=lambda x: x[1],
+                                                 reverse=True)
+            weightiest_var = str(
+                causal_strengths_abs_sorted[0][0]).split('_')[1]
+            sign = '+'
+            if np.sign(
+                    causal_strengths[causal_strengths_abs_sorted[0][0]]) < 0:
+                sign = '-'
+            agents_weightiest_var_sp[agent] = weightiest_var + ':' + str(sign)
+
+            weightiest_info_df.loc[agent, 'Weightiest_var'] = weightiest_var
+            weightiest_info_df.loc[agent, 'Strength_sign'] = str(sign)
+
+    weightiest_info_df.to_csv(BaseConfig.OUT_PATH + 'SelfNetworkFigs//' +
+                              'Agents_weightiest_var_sp_to_LAI.csv')
+    return agents_weightiest_var_sp
 
 
-def calculate_shortest_path_causal_var_selfnet_pos(p_net, p_agent,
+def calculate_shortest_path_causal_var_selfnet_pos(p_filtered_df,
                                                    p_target_var):
-    if not str(p_agent) + '_' + p_target_var in p_net.nodes():
-        return 'Uncertain'
-    short_paths = nx.single_target_shortest_path(
-        p_net,
-        str(p_agent) + '_' + p_target_var)
-    del short_paths[str(p_agent) + '_' + p_target_var]
-    if short_paths == {}:
-        return 'Uncertain'
-    causal_strengths = {}
-    for source_n in short_paths:
-        causal_strengths[source_n] = calculate_sum_weight_of_path(
-            p_net, short_paths[source_n])
-    causal_strengths_abs_sorted = sorted(causal_strengths.items(),
-                                         key=lambda x: x[1],
-                                         reverse=True)
-    weightiest_var = str(causal_strengths_abs_sorted[0][0]).split('_')[1]
-    sign = '+'
-    if np.sign(causal_strengths[causal_strengths_abs_sorted[0][0]]) < 0:
-        sign = '-'
-    return weightiest_var + ':' + str(sign)
+    centroid_data = pd.read_csv(BaseConfig.GEO_AGENT_PATH + 'GA_Centroid.csv')
+    agents_weightiest_var_sp_pos = {}
+    weightiest_info_df = pd.DataFrame(
+        columns=['GA_ID', 'Weightiest_var', 'Strength_sign'])
+
+    for agent in list(centroid_data['GA_ID']):
+        weightiest_info_df = weightiest_info_df.append(
+            pd.DataFrame({'GA_ID': agent}, index=[agent]))
+        if agent in list(p_filtered_df['Source'].unique()):
+            agent_self_net = build_net_by_csv(
+                p_filtered_df[(p_filtered_df['Source'] == agent)
+                              & (p_filtered_df['Target'] == agent)].copy())
+
+            if not str(agent) + '_' + p_target_var in agent_self_net.nodes():
+                agents_weightiest_var_sp_pos[agent] = 'Uncertain'
+                continue
+            short_paths = nx.single_target_shortest_path(
+                agent_self_net,
+                str(agent) + '_' + p_target_var)
+            del short_paths[str(agent) + '_' + p_target_var]
+            if short_paths == {}:
+                agents_weightiest_var_sp_pos[agent] = 'Uncertain'
+                continue
+            causal_strengths = {}
+            for source_n in short_paths:
+                causal_strengths[source_n] = calculate_sum_weight_of_path(
+                    agent_self_net, short_paths[source_n])
+                length_filed = 'Shortest_path_from_' + str(source_n).split(
+                    '_')[1] + '_length'
+                strength_field = 'Shortest_path_from_' + str(source_n).split(
+                    '_')[1] + '_strength'
+                if length_filed not in weightiest_info_df.columns:
+                    weightiest_info_df[length_filed] = None
+                    weightiest_info_df.loc[agent, length_filed] = len(
+                        short_paths[source_n])
+                else:
+                    weightiest_info_df.loc[agent, length_filed] = len(
+                        short_paths[source_n])
+
+                if strength_field not in weightiest_info_df.columns:
+                    weightiest_info_df[strength_field] = None
+                    weightiest_info_df.loc[
+                        agent, strength_field] = causal_strengths[source_n]
+                else:
+                    weightiest_info_df.loc[
+                        agent, strength_field] = causal_strengths[source_n]
+
+            causal_strengths_abs_sorted = sorted(causal_strengths.items(),
+                                                 key=lambda x: x[1],
+                                                 reverse=True)
+            weightiest_var = str(
+                causal_strengths_abs_sorted[0][0]).split('_')[1]
+            sign = '+'
+            if np.sign(
+                    causal_strengths[causal_strengths_abs_sorted[0][0]]) < 0:
+                sign = '-'
+            agents_weightiest_var_sp_pos[agent] = weightiest_var + ':' + str(
+                sign)
+
+            weightiest_info_df.loc[agent, 'Weightiest_var'] = weightiest_var
+            weightiest_info_df.loc[agent, 'Strength_sign'] = str(sign)
+
+    weightiest_info_df.to_csv(BaseConfig.OUT_PATH + 'SelfNetworkFigs//' +
+                              'Agents_weightiest_var_sp_pos_to_LAI.csv')
+    return agents_weightiest_var_sp_pos
 
 
-def calculate_all_path_causal_var_selfnet(p_net, p_agent, p_target_var):
-    causal_strengths = {}
-    for var in VARS_LIST:
-        if var == p_target_var:
-            continue
-        source_n = str(p_agent) + '_' + var
-        if not source_n in p_net.nodes():
-            continue
-        all_paths = nx.all_simple_paths(p_net, source_n,
-                                        str(p_agent) + '_' + p_target_var, 5)
-        strength_sum = 0
-        paths_count = 0
-        for a_path in all_paths:
-            a_path_strength = calculate_sum_weight_of_path(p_net, a_path)
-            strength_sum = strength_sum + a_path_strength
-            paths_count = paths_count + 1
-        if paths_count == 0:
-            continue
-        causal_strengths[source_n] = strength_sum / paths_count
-    if causal_strengths == {}:
-        return 'Uncertain'
-    causal_strengths_abs = dict(
-        map(lambda x, y: [x, abs(y)], causal_strengths.keys(),
-            causal_strengths.values()))
-    causal_strengths_abs_sorted = sorted(causal_strengths_abs.items(),
-                                         key=lambda x: x[1],
-                                         reverse=True)
-    weightiest_var = str(causal_strengths_abs_sorted[0][0]).split('_')[1]
-    sign = '+'
-    if np.sign(causal_strengths[causal_strengths_abs_sorted[0][0]]) < 0:
-        sign = '-'
-    return weightiest_var + ':' + str(sign)
+def calculate_all_path_causal_var_selfnet(p_filtered_df, p_target_var):
+    centroid_data = pd.read_csv(BaseConfig.GEO_AGENT_PATH + 'GA_Centroid.csv')
+    agents_weightiest_var_ap = {}
+    weightiest_info_df = pd.DataFrame(
+    columns=['GA_ID', 'Weightiest_var', 'Strength_sign'])
+    for agent in list(centroid_data['GA_ID']):
+        if agent in list(p_filtered_df['Source'].unique()):
+            agent_self_net = build_net_by_csv(
+                p_filtered_df[(p_filtered_df['Source'] == agent)
+                              & (p_filtered_df['Target'] == agent)].copy())
+            causal_strengths = {}
+            for var in VARS_LIST:
+                if var == p_target_var:
+                    continue
+                source_n = str(agent) + '_' + var
+                if not source_n in agent_self_net.nodes():
+                    continue
+                all_paths = nx.all_simple_paths(
+                    agent_self_net, source_n,
+                    str(agent) + '_' + p_target_var, 5)
+                strength_sum = 0
+                paths_count = 0
+                for a_path in all_paths:
+                    a_path_strength = calculate_sum_weight_of_path(
+                        agent_self_net, a_path)
+                    strength_sum = strength_sum + a_path_strength
+                    paths_count = paths_count + 1
+                if paths_count == 0:
+                    continue
+                causal_strengths[source_n] = strength_sum / paths_count
+
+                length_filed = 'All_path_from_' + str(source_n).split(
+                    '_')[1] + '_count'
+                strength_field = 'All_path_from_' + str(source_n).split(
+                    '_')[1] + '_strength'
+                if length_filed not in weightiest_info_df.columns:
+                    weightiest_info_df[length_filed] = None
+                    weightiest_info_df.loc[agent, length_filed] = paths_count
+                else:
+                    weightiest_info_df.loc[agent, length_filed] = paths_count
+
+                if strength_field not in weightiest_info_df.columns:
+                    weightiest_info_df[strength_field] = None
+                    weightiest_info_df.loc[
+                        agent, strength_field] = causal_strengths[source_n]
+                else:
+                    weightiest_info_df.loc[
+                        agent, strength_field] = causal_strengths[source_n]
+
+            if causal_strengths == {}:
+                agents_weightiest_var_ap[agent] = 'Uncertain'
+                continue
+            causal_strengths_abs = dict(
+                map(lambda x, y: [x, abs(y)], causal_strengths.keys(),
+                    causal_strengths.values()))
+            causal_strengths_abs_sorted = sorted(causal_strengths_abs.items(),
+                                                 key=lambda x: x[1],
+                                                 reverse=True)
+            weightiest_var = str(
+                causal_strengths_abs_sorted[0][0]).split('_')[1]
+            sign = '+'
+            if np.sign(
+                    causal_strengths[causal_strengths_abs_sorted[0][0]]) < 0:
+                sign = '-'
+            agents_weightiest_var_ap[agent] = weightiest_var + ':' + str(sign)
+
+            weightiest_info_df.loc[agent, 'Weightiest_var'] = weightiest_var
+            weightiest_info_df.loc[agent, 'Strength_sign'] = str(sign)
+
+    weightiest_info_df.to_csv(BaseConfig.OUT_PATH + 'SelfNetworkFigs//' +
+                              'Agents_weightiest_var_ap_to_LAI.csv')
+    return agents_weightiest_var_ap
 
 
-def calculate_all_path_causal_var_selfnet_pos(p_net, p_agent, p_target_var):
-    causal_strengths = {}
-    for var in VARS_LIST:
-        if var == p_target_var:
-            continue
-        source_n = str(p_agent) + '_' + var
-        if not source_n in p_net.nodes():
-            continue
-        all_paths = nx.all_simple_paths(p_net, source_n,
-                                        str(p_agent) + '_' + p_target_var, 5)
-        strength_sum = 0
-        paths_count = 0
-        for a_path in all_paths:
-            a_path_strength = calculate_sum_weight_of_path(p_net, a_path)
-            strength_sum = strength_sum + a_path_strength
-            paths_count = paths_count + 1
-        if paths_count == 0:
-            continue
-        causal_strengths[source_n] = strength_sum / paths_count
-    if causal_strengths == {}:
-        return 'Uncertain'
-    causal_strengths_abs_sorted = sorted(causal_strengths.items(),
-                                         key=lambda x: x[1],
-                                         reverse=True)
-    weightiest_var = str(causal_strengths_abs_sorted[0][0]).split('_')[1]
-    sign = '+'
-    if np.sign(causal_strengths[causal_strengths_abs_sorted[0][0]]) < 0:
-        sign = '-'
-    return weightiest_var + ':' + str(sign)
+def calculate_all_path_causal_var_selfnet_pos(p_filtered_df, p_target_var):
+    centroid_data = pd.read_csv(BaseConfig.GEO_AGENT_PATH + 'GA_Centroid.csv')
+    agents_weightiest_var_ap_pos = {}
+    weightiest_info_df = pd.DataFrame(
+    columns=['GA_ID', 'Weightiest_var', 'Strength_sign'])
+    for agent in list(centroid_data['GA_ID']):
+        if agent in list(p_filtered_df['Source'].unique()):
+            agent_self_net = build_net_by_csv(
+                p_filtered_df[(p_filtered_df['Source'] == agent)
+                              & (p_filtered_df['Target'] == agent)].copy())
+            causal_strengths = {}
+            for var in VARS_LIST:
+                if var == p_target_var:
+                    continue
+                source_n = str(agent) + '_' + var
+                if not source_n in agent_self_net.nodes():
+                    continue
+                all_paths = nx.all_simple_paths(
+                    agent_self_net, source_n,
+                    str(agent) + '_' + p_target_var, 5)
+                strength_sum = 0
+                paths_count = 0
+                for a_path in all_paths:
+                    a_path_strength = calculate_sum_weight_of_path(
+                        agent_self_net, a_path)
+                    strength_sum = strength_sum + a_path_strength
+                    paths_count = paths_count + 1
+                if paths_count == 0:
+                    continue
+                causal_strengths[source_n] = strength_sum / paths_count
+                
+                length_filed = 'All_path_from_' + str(source_n).split(
+                    '_')[1] + '_count'
+                strength_field = 'All_path_from_' + str(source_n).split(
+                    '_')[1] + '_strength'
+                if length_filed not in weightiest_info_df.columns:
+                    weightiest_info_df[length_filed] = None
+                    weightiest_info_df.loc[agent, length_filed] = paths_count
+                else:
+                    weightiest_info_df.loc[agent, length_filed] = paths_count
+
+                if strength_field not in weightiest_info_df.columns:
+                    weightiest_info_df[strength_field] = None
+                    weightiest_info_df.loc[
+                        agent, strength_field] = causal_strengths[source_n]
+                else:
+                    weightiest_info_df.loc[
+                        agent, strength_field] = causal_strengths[source_n]
+
+            if causal_strengths == {}:
+                agents_weightiest_var_ap_pos[agent] = 'Uncertain'
+                continue
+            causal_strengths_abs_sorted = sorted(causal_strengths.items(),
+                                                 key=lambda x: x[1],
+                                                 reverse=True)
+            weightiest_var = str(
+                causal_strengths_abs_sorted[0][0]).split('_')[1]
+            sign = '+'
+            if np.sign(
+                    causal_strengths[causal_strengths_abs_sorted[0][0]]) < 0:
+                sign = '-'
+            agents_weightiest_var_ap_pos[agent] = weightiest_var + ':' + str(
+                sign)
+
+            weightiest_info_df.loc[agent, 'Weightiest_var'] = weightiest_var
+            weightiest_info_df.loc[agent, 'Strength_sign'] = str(sign)
+
+    weightiest_info_df.to_csv(BaseConfig.OUT_PATH + 'SelfNetworkFigs//' +
+                              'Agents_weightiest_var_ap_pos_to_LAI.csv')
+    return agents_weightiest_var_ap_pos
 
 
 def calculate_sum_weight_of_path(p_net, p_nodes_list):
