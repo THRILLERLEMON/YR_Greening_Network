@@ -5,7 +5,7 @@ import os
 import time
 import multiprocessing
 import itertools
-# import igraph
+import igraph
 import numpy as np
 import pandas as pd
 import networkx as nx
@@ -233,6 +233,11 @@ def draw_links_df_in_one_net(p_self_net_df):
                          weight=abs(lRow['Strength']),
                          strength=lRow['Strength'],
                          timelag=abs(lRow['TimeLag']))
+
+    output_net_info_by_nx(
+        network,
+        BaseConfig.OUT_PATH + 'SelfNetworkFigs//all_in_one_net_info.csv')
+
     fig = plt.figure(figsize=(10, 10), dpi=300)
     ax = fig.add_subplot()
     mapTitle = 'NetWork'
@@ -269,7 +274,7 @@ def draw_links_df_in_one_net(p_self_net_df):
     nx.draw_networkx_edges(network,
                            pos,
                            width=1,
-                           alpha=0.7,
+                           alpha=0.8,
                            edge_color=[
                                float(d['strength'])
                                for (u, v, d) in network.edges(data=True)
@@ -293,6 +298,38 @@ def draw_links_df_in_one_net(p_self_net_df):
                             font_weight='bold')
 
     plt.savefig(BaseConfig.OUT_PATH + 'SelfNetworkFigs//all_in_one_net.pdf')
+
+
+def output_net_info_by_nx(p_networkx, p_path):
+    # get the property of this network
+    net_nodes = p_networkx.nodes()
+    net_degree_zip = p_networkx.degree()
+    net_degree = [v[1] for v in net_degree_zip]
+    net_indeg_zip = p_networkx.in_degree()
+    net_indeg = [v[1] for v in net_indeg_zip]
+    net_oudeg_zip = p_networkx.out_degree()
+    net_oudeg = [v[1] for v in net_oudeg_zip]
+    net_out_div_in = np.divide(np.array(net_oudeg), np.array(net_indeg))
+
+    i_net = igraph.Graph.from_networkx(p_networkx)
+    i_net_degree = i_net.degree()
+    net_betness = i_net.betweenness()
+    net_cloness = i_net.closeness()
+    net_diversity = i_net.diversity(weights='weight')
+
+    # output information in a csv file
+    out_net_info = pd.DataFrame({
+        'point': net_nodes,
+        'degree': net_degree,
+        'i_degree': i_net_degree,
+        'betweenness': net_betness,
+        'closeness': net_cloness,
+        'diversity': net_diversity,
+        'indegree': net_indeg,
+        'outdegree': net_oudeg,
+        'outdegree_div_indegree': net_out_div_in
+    })
+    out_net_info.to_csv(p_path)
 
 
 def draw_self_info(p_agents_weightiest_var_dict, p_fig_name):
