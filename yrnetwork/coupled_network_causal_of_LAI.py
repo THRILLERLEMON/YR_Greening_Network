@@ -153,10 +153,11 @@ def show_self_nets(p_target_var):
     self_df = pd.read_csv(BaseConfig.OUT_PATH +
                           'SelfNetworkCSV//SelfNetworkAll.csv')
     filtered_df = self_df[(self_df['Unoriented'] == 0)].copy()
+    draw_links_df_in_one_net(filtered_df)
     centroid_data = pd.read_csv(BaseConfig.GEO_AGENT_PATH + 'GA_Centroid.csv')
     for agent in list(centroid_data['GA_ID']):
         if agent in list(filtered_df['Source'].unique()):
-            agent_self_net = build_net_by_csv(
+            agent_self_net = build_net_by_links_df(
                 filtered_df[(filtered_df['Source'] == agent)
                             & (filtered_df['Target'] == agent)].copy())
             # draw_self_net_for_agent(agent_self_net, agent)
@@ -178,6 +179,120 @@ def show_self_nets(p_target_var):
                    'Agents_weightiest_var_sp_pos_to_' + p_target_var)
     draw_self_info(agents_weightiest_var_ap_pos,
                    'Agents_weightiest_var_ap_pos_to_' + p_target_var)
+
+
+# 暂时弃用
+def normalize_links_strength(p_self_net_df):
+    yearly_vars = []
+    monthly_vars = []
+    for var in VARS_LIST:
+        # monthly data
+        if VARS_TIME_SCALE_DICT[var] == 'monthly_yearly':
+            monthly_vars.append(var)
+        # yearly data
+        elif VARS_TIME_SCALE_DICT[var] == 'yearly':
+            yearly_vars.append(var)
+    yearly_links = p_self_net_df[
+        (p_self_net_df['VarSou'].isin(yearly_vars))
+        | (p_self_net_df['VarTar'].isin(yearly_vars))].copy()
+    monthly_links = p_self_net_df[
+        (p_self_net_df['VarSou'].isin(monthly_vars))
+        & (p_self_net_df['VarTar'].isin(monthly_vars))].copy()
+
+    max_min_scaler = lambda x: (x - np.min(x)) / (np.max(x) - np.min(x))
+
+    yearly_links['Strength'] = yearly_links[['Strength']].apply(max_min_scaler)
+    monthly_links['Strength'] = monthly_links[['Strength'
+                                               ]].apply(max_min_scaler)
+    both_links = yearly_links.append(monthly_links)
+    print(both_links)
+    return both_links
+
+
+def draw_links_df_in_one_net(p_self_net_df):
+    # build a net network
+    network = nx.MultiDiGraph()
+    # add every vertex to the net
+    var_sou = p_self_net_df['VarSou'].map(str)
+    var_tar = p_self_net_df['VarTar'].map(str)
+    all_ver_list = list(p_self_net_df['VarSou']) + list(
+        p_self_net_df['VarTar'])
+    # set the unique of the vertexs
+    ver_list_unique = list(set(all_ver_list))
+    for v_id_var in ver_list_unique:
+        network.add_node(v_id_var,
+                         label=VAR_LABEL_DICT[v_id_var],
+                         size=30,
+                         color=VAR_COLOR_DICT[v_id_var],
+                         label_size=15)
+    for lIndex, lRow in p_self_net_df.iterrows():
+        thisSou = lRow["VarSou"]
+        thisTar = lRow["VarTar"]
+        network.add_edge(thisSou,
+                         thisTar,
+                         weight=abs(lRow['Strength']),
+                         strength=lRow['Strength'],
+                         timelag=abs(lRow['TimeLag']))
+    fig = plt.figure(figsize=(10, 10), dpi=300)
+    ax = fig.add_subplot()
+    mapTitle = 'NetWork'
+    plt.title(mapTitle)
+
+    # pos_old = nx.spiral_layout(network)
+
+    pos_old = nx.spiral_layout(network, equidistant=True, resolution=0.35)
+    degree_of_nodes = {}
+    for var in VARS_LIST:
+        if var in pos_old.keys():
+            if var != 'LAI':
+                degree_of_nodes[var] = network.degree(var)
+    degree_of_nodes_sorted = sorted(degree_of_nodes.items(),
+                                    key=lambda x: x[1],
+                                    reverse=False)
+    nodes_order = [t[0] for t in degree_of_nodes_sorted]
+    nodes_order = ['LAI'] + nodes_order
+    # nodes_order.append('LAI')
+    pos = dict(map(lambda x, y: [x, y], nodes_order, pos_old.values()))
+
+    # first draw point's edge in black to set Point edge
+    nx.draw_networkx_nodes(
+        network,
+        pos,
+        node_size=[network.degree(n) * 1.4 for n in network],
+        node_color='k')
+    nx.draw_networkx_nodes(
+        network,
+        pos,
+        node_size=[network.degree(n) * 1.3 for n in network],
+        node_color=[d['color'] for n, d in network.nodes(data=True)])
+
+    nx.draw_networkx_edges(network,
+                           pos,
+                           width=1,
+                           alpha=0.7,
+                           edge_color=[
+                               float(d['strength'])
+                               for (u, v, d) in network.edges(data=True)
+                           ],
+                           edge_cmap=plt.cm.RdBu_r,
+                           arrows=True,
+                           arrowstyle='->',
+                           min_target_margin=16,
+                           arrowsize=8,
+                           connectionstyle="arc3,rad=0.1")
+
+    nx.draw_networkx_labels(network,
+                            pos,
+                            labels={
+                                n: network.nodes[n]['label']
+                                for n, d in network.nodes(data=True)
+                            },
+                            font_size=14,
+                            font_color='k',
+                            font_family='Times New Roman',
+                            font_weight='bold')
+
+    plt.savefig(BaseConfig.OUT_PATH + 'SelfNetworkFigs//all_in_one_net.pdf')
 
 
 def draw_self_info(p_agents_weightiest_var_dict, p_fig_name):
@@ -404,10 +519,10 @@ def calculate_shortest_path_causal_var_selfnet(p_filtered_df, p_target_var):
     centroid_data = pd.read_csv(BaseConfig.GEO_AGENT_PATH + 'GA_Centroid.csv')
     agents_weightiest_var_sp = {}
     weightiest_info_df = pd.DataFrame(
-    columns=['GA_ID', 'Weightiest_var', 'Strength_sign'])
+        columns=['GA_ID', 'Weightiest_var', 'Strength_sign'])
     for agent in list(centroid_data['GA_ID']):
         if agent in list(p_filtered_df['Source'].unique()):
-            agent_self_net = build_net_by_csv(
+            agent_self_net = build_net_by_links_df(
                 p_filtered_df[(p_filtered_df['Source'] == agent)
                               & (p_filtered_df['Target'] == agent)].copy())
             if not str(agent) + '_' + p_target_var in agent_self_net.nodes():
@@ -476,7 +591,7 @@ def calculate_shortest_path_causal_var_selfnet_pos(p_filtered_df,
         weightiest_info_df = weightiest_info_df.append(
             pd.DataFrame({'GA_ID': agent}, index=[agent]))
         if agent in list(p_filtered_df['Source'].unique()):
-            agent_self_net = build_net_by_csv(
+            agent_self_net = build_net_by_links_df(
                 p_filtered_df[(p_filtered_df['Source'] == agent)
                               & (p_filtered_df['Target'] == agent)].copy())
 
@@ -538,10 +653,10 @@ def calculate_all_path_causal_var_selfnet(p_filtered_df, p_target_var):
     centroid_data = pd.read_csv(BaseConfig.GEO_AGENT_PATH + 'GA_Centroid.csv')
     agents_weightiest_var_ap = {}
     weightiest_info_df = pd.DataFrame(
-    columns=['GA_ID', 'Weightiest_var', 'Strength_sign'])
+        columns=['GA_ID', 'Weightiest_var', 'Strength_sign'])
     for agent in list(centroid_data['GA_ID']):
         if agent in list(p_filtered_df['Source'].unique()):
-            agent_self_net = build_net_by_csv(
+            agent_self_net = build_net_by_links_df(
                 p_filtered_df[(p_filtered_df['Source'] == agent)
                               & (p_filtered_df['Target'] == agent)].copy())
             causal_strengths = {}
@@ -612,10 +727,10 @@ def calculate_all_path_causal_var_selfnet_pos(p_filtered_df, p_target_var):
     centroid_data = pd.read_csv(BaseConfig.GEO_AGENT_PATH + 'GA_Centroid.csv')
     agents_weightiest_var_ap_pos = {}
     weightiest_info_df = pd.DataFrame(
-    columns=['GA_ID', 'Weightiest_var', 'Strength_sign'])
+        columns=['GA_ID', 'Weightiest_var', 'Strength_sign'])
     for agent in list(centroid_data['GA_ID']):
         if agent in list(p_filtered_df['Source'].unique()):
-            agent_self_net = build_net_by_csv(
+            agent_self_net = build_net_by_links_df(
                 p_filtered_df[(p_filtered_df['Source'] == agent)
                               & (p_filtered_df['Target'] == agent)].copy())
             causal_strengths = {}
@@ -638,7 +753,7 @@ def calculate_all_path_causal_var_selfnet_pos(p_filtered_df, p_target_var):
                 if paths_count == 0:
                     continue
                 causal_strengths[source_n] = strength_sum / paths_count
-                
+
                 length_filed = 'All_path_from_' + str(source_n).split(
                     '_')[1] + '_count'
                 strength_field = 'All_path_from_' + str(source_n).split(
@@ -736,7 +851,7 @@ def get_inner_info_by_var(p_var):
     net_info = pd.DataFrame()
     var_inner_df = pd.read_csv(BaseConfig.OUT_PATH + 'InnerNetworkCSV//' +
                                p_var + '_filtered.csv')
-    var_inner_net = build_net_by_csv(var_inner_df)
+    var_inner_net = build_net_by_links_df(var_inner_df)
 
     net_info = net_info.append(
         pd.DataFrame(
@@ -767,7 +882,7 @@ def draw_inner_communities_info(p_var):
     """
     var_inner_df = pd.read_csv(BaseConfig.OUT_PATH + 'InnerNetworkCSV//' +
                                p_var + '_filtered.csv')
-    var_inner_net = build_net_by_csv(var_inner_df)
+    var_inner_net = build_net_by_links_df(var_inner_df)
     # community_list=community.girvan_newman(var_inner_net)
     # comp_tuple=tuple(sorted(c) for c in next(community_list))
     # print(comp_tuple)
@@ -813,7 +928,7 @@ def draw_inner_centrality_info(p_var):
     """
     var_inner_df = pd.read_csv(BaseConfig.OUT_PATH + 'InnerNetworkCSV//' +
                                p_var + '_filtered.csv')
-    var_inner_net = build_net_by_csv(var_inner_df)
+    var_inner_net = build_net_by_links_df(var_inner_df)
 
     # draw degree map
     fig = plt.figure(figsize=(20, 12), dpi=500)
@@ -969,7 +1084,7 @@ def draw_inner_centrality_info(p_var):
     plt.close()
 
 
-def build_net_by_csv(p_edges_df):
+def build_net_by_links_df(p_edges_df):
     """
     built a net by a pands df
     """
@@ -1076,7 +1191,7 @@ def build_coupled_network():
     filtered_edges_df = filter_links(all_edges_df)
     filtered_edges_df.to_csv(BaseConfig.OUT_PATH +
                              'Coupled_Network\\AllLinksFiltered.csv')
-    coupled_network = build_net_by_csv(filtered_edges_df)
+    coupled_network = build_net_by_links_df(filtered_edges_df)
     draw_net_on_map(coupled_network, 'coupled_network')
 
     # draw all inner and outer net
